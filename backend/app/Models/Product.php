@@ -1,0 +1,51 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class Product extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'category_id', 'brand_id', 'name', 'slug', 'description',
+        'specs', 'compatibility', 'price', 'stock', 'image',
+        'rating', 'review_count', 'is_trending', 'is_active',
+    ];
+
+    protected $casts = [
+        'specs' => 'array',
+        'compatibility' => 'array',
+        'price' => 'decimal:2',
+        'rating' => 'decimal:2',
+        'is_trending' => 'boolean',
+        'is_active' => 'boolean',
+    ];
+
+    public function category()
+    {
+        return $this->belongsTo(Category::class);
+    }
+
+    public function brand()
+    {
+        return $this->belongsTo(Brand::class);
+    }
+
+    public function carts()
+    {
+        return $this->hasMany(Cart::class);
+    }
+
+    public function orderItems()
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    public function getFormattedPriceAttribute(): string
+    {
+        return 'Rp ' . number_format($this->price, 0, ',', '.');
+    }
+}
