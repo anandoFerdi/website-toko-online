@@ -52,8 +52,7 @@ export default function AIChatbot() {
   };
 
   return (
-    <div className="font-sans antialiased bg-slate-100 min-h-screen p-8 flex flex-col justify-between">
-
+    <>
       {/* --- 1. FLOATING BUTTON WITH MASCOT --- */}
       <AnimatePresence>
         {!isOpen && (
@@ -267,6 +266,6 @@ export default function AIChatbot() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 }

@@ -176,7 +176,25 @@ export default function ProfilePage() {
     </div>
   );
 
-  if (!user) return null;
+  if (!user) return (
+    <div className="min-h-[60vh] flex flex-col items-center justify-center p-4 text-center bg-background">
+      <div className="bg-white p-8 rounded-2xl border border-border shadow-card max-w-md w-full">
+        <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-100">
+          <AlertCircle className="w-8 h-8 text-red-600" />
+        </div>
+        <h2 className="text-xl font-bold text-text-main mb-2">Gagal Memuat Profil</h2>
+        <p className="text-text-muted text-sm mb-6">Terjadi kesalahan koneksi atau data profil tidak dapat diambil. Silakan periksa koneksi Anda dan coba lagi.</p>
+        <div className="flex gap-3">
+          <button onClick={() => router.push('/')} className="flex-1 btn-secondary py-2.5 text-sm">
+            Kembali ke Home
+          </button>
+          <button onClick={() => window.location.reload()} className="flex-1 btn-primary py-2.5 text-sm shadow-btn-primary">
+            Coba Lagi
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="bg-background min-h-screen py-8 md:py-12">
