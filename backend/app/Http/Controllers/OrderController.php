@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 use Midtrans\Config;
 use Midtrans\Snap;
 use Midtrans\Notification;
@@ -163,9 +164,11 @@ class OrderController extends Controller
                     $order->update(['payment_status' => 'unpaid', 'status' => 'pending']);
                 } elseif ($fraudStatus === 'accept') {
                     $order->update(['payment_status' => 'paid', 'status' => 'processing', 'payment_method' => $paymentType]);
+                    $this->createBiteshipOrder($order);
                 }
             } elseif ($transactionStatus === 'settlement') {
                 $order->update(['payment_status' => 'paid', 'status' => 'processing', 'payment_method' => $paymentType]);
+                $this->createBiteshipOrder($order);
             } elseif (in_array($transactionStatus, ['cancel', 'deny', 'expire'])) {
                 $order->update(['payment_status' => 'unpaid', 'status' => 'cancelled']);
             } elseif ($transactionStatus === 'pending') {
@@ -200,19 +203,14 @@ class OrderController extends Controller
             'courier_name'    => 'nullable|string|max:100',
         ]);
 
-        // If shipping with tracking info, ensure both tracking_number and courier_code are provided
-        if (($validated['status'] ?? $order->status) === 'shipped') {
-            $trackingNumber = $validated['tracking_number'] ?? $order->tracking_number;
-            $courierCode = $validated['courier_code'] ?? $order->courier_code;
-
-            if (empty($trackingNumber) || empty($courierCode)) {
-                return response()->json([
-                    'message' => 'Nomor resi dan kurir wajib diisi saat status diubah ke "Dikirim".'
-                ], 422);
-            }
-        }
+        $statusChangingToShipped = (($validated['status'] ?? null) === 'shipped' && $order->status !== 'shipped');
 
         $order->update($validated);
+
+        if ($statusChangingToShipped && empty($order->tracking_number)) {
+            $this->createBiteshipOrder($order);
+        }
+
         return response()->json($order);
     }
 
@@ -333,9 +331,11 @@ class OrderController extends Controller
                     $order->update(['payment_status' => 'unpaid', 'status' => 'pending']);
                 } elseif ($fraudStatus === 'accept') {
                     $order->update(['payment_status' => 'paid', 'status' => 'processing', 'payment_method' => $paymentType]);
+                    $this->createBiteshipOrder($order);
                 }
             } elseif ($transactionStatus === 'settlement') {
                 $order->update(['payment_status' => 'paid', 'status' => 'processing', 'payment_method' => $paymentType]);
+                $this->createBiteshipOrder($order);
             } elseif (in_array($transactionStatus, ['cancel', 'deny', 'expire'])) {
                 $order->update(['payment_status' => 'unpaid', 'status' => 'cancelled']);
             } elseif ($transactionStatus === 'pending') {
@@ -359,5 +359,101 @@ class OrderController extends Controller
 
         $pdf = Pdf::loadView('invoice', compact('order'));
         return $pdf->download('invoice-' . $order->order_number . '.pdf');
+    }
+
+    /**
+     * Create Biteship order (waybill) automatically after payment
+     */
+    private function createBiteshipOrder(Order $order)
+    {
+        // Skip if tracking number already exists
+        if ($order->tracking_number) {
+            return;
+        }
+
+        $apiKey = config('biteship.api_key');
+        $baseUrl = config('biteship.base_url');
+
+        if (empty($apiKey)) {
+            Log::warning('Biteship API key not set. Cannot auto-create waybill for order ' . $order->order_number);
+            return;
+        }
+
+        // Format items for Biteship
+        $biteshipItems = [];
+        foreach ($order->items as $item) {
+            $productName = $item->product ? $item->product->name : 'Produk Toko';
+            $biteshipItems[] = [
+                'name' => mb_substr($productName, 0, 50),
+                'description' => 'Pembelian dari Gudang Komputer',
+                'value' => (int) $item->price,
+                'length' => 10,
+                'width' => 10,
+                'height' => 10,
+                'weight' => 1000, // Default 1kg per item
+                'quantity' => $item->quantity
+            ];
+        }
+
+        // Prepare payload
+        // Using dummy origin data since it's not stored dynamically in checkout
+        $payload = [
+            'shipper_contact_name' => 'Gudang Komputer',
+            'shipper_contact_phone' => '081234567890',
+            'shipper_contact_email' => 'admin@gudangkomputer.com',
+            'origin_contact_name' => 'Gudang Komputer',
+            'origin_contact_phone' => '081234567890',
+            'origin_address' => 'Jl. Kebon Jeruk Raya No. 1, Jakarta Barat',
+            'origin_postal_code' => 11530,
+            
+            'destination_contact_name' => $order->recipient_name,
+            'destination_contact_phone' => $order->recipient_phone,
+            'destination_address' => $order->shipping_address,
+            'destination_postal_code' => 12345, // Dummy postal code since it's not captured yet
+            
+            'courier_company' => 'jne',
+            'courier_type' => 'reg',
+            'courier_insurance' => 500000,
+            'delivery_type' => 'later',
+            'order_note' => $order->notes ?? 'Mohon kirim dengan hati-hati',
+            
+            'items' => $biteshipItems
+        ];
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => $apiKey,
+                'Content-Type' => 'application/json',
+            ])->timeout(15)->post("{$baseUrl}/v1/orders", $payload);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                
+                // Usually the ID of the tracking/waybill is in the response (either id or courier.waybill_id)
+                // Biteship POST /v1/orders returns the tracking ID in `id` and courier details in `courier`
+                $trackingId = $data['courier']['waybill_id'] ?? $data['id'] ?? null;
+                $courierName = $data['courier']['company'] ?? 'JNE';
+
+                if ($trackingId) {
+                    $order->update([
+                        'status' => 'shipped',
+                        'tracking_number' => $trackingId,
+                        'courier_code' => 'jne',
+                        'courier_name' => strtoupper($courierName)
+                    ]);
+                    
+                    Log::info("Biteship waybill created successfully for order {$order->order_number}: {$trackingId}");
+                }
+            } else {
+                Log::error('Biteship create order failed', [
+                    'order' => $order->order_number,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                    'payload' => $payload
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Exception creating Biteship order for ' . $order->order_number . ': ' . $e->getMessage());
+        }
     }
 }

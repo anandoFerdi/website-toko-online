@@ -333,7 +333,7 @@ export default function AdminOrders() {
                       <div className="space-y-3 p-4 bg-purple-50/50 rounded-lg border border-purple-200/60">
                         <h4 className="text-sm font-bold text-purple-700 flex items-center gap-2">
                           <Truck className="w-4 h-4" /> Informasi Resi
-                          {statusForm.status === 'shipped' && <span className="text-red-500 text-xs font-normal">(Wajib diisi)</span>}
+                          {statusForm.status === 'shipped' && <span className="text-purple-500 text-xs font-normal">(Opsional - akan dibuat otomatis jika kosong)</span>}
                         </h4>
                         <div className="space-y-2">
                           <label className="text-sm font-medium text-text-main block">Kurir</label>
@@ -341,7 +341,6 @@ export default function AdminOrders() {
                             value={statusForm.courier_code}
                             onChange={(e) => handleCourierChange(e.target.value)}
                             className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                            required={statusForm.status === 'shipped'}
                           >
                             <option value="">— Pilih Kurir —</option>
                             {COURIERS.map(c => (
@@ -355,9 +354,8 @@ export default function AdminOrders() {
                             type="text"
                             value={statusForm.tracking_number}
                             onChange={(e) => setStatusForm({...statusForm, tracking_number: e.target.value})}
-                            placeholder="Masukkan nomor resi pengiriman"
+                            placeholder="Kosongkan untuk resi otomatis..."
                             className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                            required={statusForm.status === 'shipped'}
                           />
                         </div>
                       </div>
