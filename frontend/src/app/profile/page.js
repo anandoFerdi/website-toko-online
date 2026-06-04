@@ -7,7 +7,7 @@ import {
   User, LogOut, Package, Clock, CheckCircle2, AlertCircle,
   ShoppingBag, CreditCard, FileDown, Settings, ChevronRight,
   MapPin, Lock, Mail, Trash2, ShoppingCart, Save, Eye, EyeOff,
-  X
+  X, Star
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -91,6 +91,9 @@ export default function ProfilePage() {
   const [orders, setOrders]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab]         = useState('all');
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [newReview, setNewReview] = useState({ name: '', role: '', rating: 5, comment: '' });
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const router = useRouter();
   const snapLoaded = useRef(false);
 
@@ -110,6 +113,7 @@ export default function ProfilePage() {
     try {
       const [uRes, oRes] = await Promise.all([api.get('/me'), api.get('/orders')]);
       setUser(uRes.data);
+      setNewReview(prev => ({...prev, name: uRes.data.name}));
       setOrders(oRes.data.data || oRes.data);
     } catch (err) {
       if (err.response?.status === 401) { Cookies.remove('auth_token'); router.push('/login'); }
@@ -209,10 +213,10 @@ export default function ProfilePage() {
             <p className="text-sm text-text-muted">{user.email}</p>
           </div>
           <button
-            onClick={handleLogout}
-            className="ml-auto flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-xl text-sm font-semibold transition-colors"
+            onClick={() => setIsReviewModalOpen(true)}
+            className="ml-auto flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-xl text-sm font-semibold transition-colors"
           >
-            <LogOut className="w-4 h-4" /> Keluar
+            <Star className="w-4 h-4" /> Tambah Ulasan
           </button>
         </div>
 
@@ -260,6 +264,99 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* ── REVIEW MODAL ── */}
+      {isReviewModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+            <button 
+              onClick={() => setIsReviewModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            
+            <h3 className="text-2xl font-bold text-text-main mb-6">Berikan Ulasan Anda</h3>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setIsSubmittingReview(true);
+              try {
+                await api.post('/testimonials', newReview);
+                setIsReviewModalOpen(false);
+                setNewReview({ ...newReview, role: '', rating: 5, comment: '' });
+                alert('Ulasan berhasil dikirim!');
+              } catch (error) {
+                console.error('Failed to submit review:', error);
+                alert('Gagal mengirim ulasan.');
+              } finally {
+                setIsSubmittingReview(false);
+              }
+            }} className="space-y-4 text-left">
+              <div>
+                <label className="block text-sm font-medium text-text-main mb-1">Nama</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newReview.name}
+                  onChange={(e) => setNewReview({...newReview, name: e.target.value})}
+                  className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  placeholder="Nama Anda"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-text-main mb-1">Peran / Pekerjaan (Opsional)</label>
+                <input 
+                  type="text" 
+                  value={newReview.role}
+                  onChange={(e) => setNewReview({...newReview, role: e.target.value})}
+                  className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  placeholder="Misal: Gamer, Developer"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-text-main mb-1">Rating</label>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setNewReview({...newReview, rating: star})}
+                      className="focus:outline-none"
+                    >
+                      <Star className={`w-8 h-8 ${newReview.rating >= star ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-text-main mb-1">Komentar</label>
+                <textarea 
+                  required
+                  rows="4"
+                  value={newReview.comment}
+                  onChange={(e) => setNewReview({...newReview, comment: e.target.value})}
+                  className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                  placeholder="Ceritakan pengalaman Anda berbelanja di sini..."
+                ></textarea>
+              </div>
+              
+              <div className="pt-2">
+                <button 
+                  type="submit" 
+                  disabled={isSubmittingReview}
+                  className="w-full btn-primary py-3 flex justify-center items-center gap-2"
+                >
+                  {isSubmittingReview ? 'Mengirim...' : 'Kirim Ulasan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
