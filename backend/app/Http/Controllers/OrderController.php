@@ -193,9 +193,25 @@ class OrderController extends Controller
     {
         $order = Order::findOrFail($id);
         $validated = $request->validate([
-            'status'         => 'sometimes|in:pending,processing,shipped,delivered,cancelled',
-            'payment_status' => 'sometimes|in:unpaid,paid,refunded',
+            'status'          => 'sometimes|in:pending,processing,shipped,delivered,cancelled',
+            'payment_status'  => 'sometimes|in:unpaid,paid,refunded',
+            'tracking_number' => 'nullable|string|max:100',
+            'courier_code'    => 'nullable|string|max:50',
+            'courier_name'    => 'nullable|string|max:100',
         ]);
+
+        // If shipping with tracking info, ensure both tracking_number and courier_code are provided
+        if (($validated['status'] ?? $order->status) === 'shipped') {
+            $trackingNumber = $validated['tracking_number'] ?? $order->tracking_number;
+            $courierCode = $validated['courier_code'] ?? $order->courier_code;
+
+            if (empty($trackingNumber) || empty($courierCode)) {
+                return response()->json([
+                    'message' => 'Nomor resi dan kurir wajib diisi saat status diubah ke "Dikirim".'
+                ], 422);
+            }
+        }
+
         $order->update($validated);
         return response()->json($order);
     }

@@ -7,6 +7,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\TrackingController;
 use Illuminate\Support\Facades\Route;
 
 // Midtrans Webhook (public, no auth needed - Midtrans calls this)
@@ -37,6 +38,10 @@ Route::post('/ai/chat', [AIController::class, 'chat']);
 Route::post('/ai/build', [AIController::class, 'generateBuild']);
 Route::post('/ai/compatibility', [AIController::class, 'checkCompatibility']);
 
+// Public Tracking (no auth needed)
+Route::get('/tracking/couriers', [TrackingController::class, 'couriers']);
+Route::post('/tracking/check', [TrackingController::class, 'publicTrack']);
+
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     // Auth
@@ -62,6 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/orders/{id}/refresh-payment', [OrderController::class, 'refreshPayment']);
     Route::post('/orders/{id}/sync-payment', [OrderController::class, 'syncPayment']);
     Route::get('/orders/{id}/invoice', [OrderController::class, 'downloadInvoice']);
+    Route::get('/orders/{id}/tracking', [TrackingController::class, 'track']);
 
     // Admin Routes
     Route::middleware('admin')->prefix('admin')->group(function () {

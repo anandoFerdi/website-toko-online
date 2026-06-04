@@ -12,7 +12,8 @@ class Order extends Model
     protected $fillable = [
         'user_id', 'order_number', 'subtotal', 'shipping_cost', 'total_price',
         'status', 'payment_status', 'payment_method', 'midtrans_order_id',
-        'midtrans_token', 'shipping_address', 'recipient_name', 'recipient_phone', 'notes',
+        'midtrans_token', 'tracking_number', 'courier_code', 'courier_name',
+        'shipping_address', 'recipient_name', 'recipient_phone', 'notes',
     ];
 
     protected $casts = [

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Package, Plus, Pencil, Trash2, X, Search, Image as ImageIcon } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, X, Search, Image as ImageIcon, Upload } from 'lucide-react';
 import api from '@/lib/api';
 
 export default function AdminProducts() {
@@ -21,11 +21,17 @@ export default function AdminProducts() {
     price: '',
     stock: '',
     description: '',
-    image: '',
     specs: '',
     compatibility: '',
     is_trending: false
   });
+
+  // Image upload state
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [removeImage, setRemoveImage] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -63,11 +69,13 @@ export default function AdminProducts() {
       price: '',
       stock: '',
       description: '',
-      image: '',
       specs: '',
       compatibility: '',
       is_trending: false
     });
+    setImageFile(null);
+    setImagePreview('');
+    setRemoveImage(false);
     setEditingId(null);
     setIsModalOpen(true);
   };
@@ -80,17 +88,22 @@ export default function AdminProducts() {
       price: parseInt(product.price).toString(),
       stock: product.stock.toString(),
       description: product.description || '',
-      image: product.image || '',
       specs: typeof product.specs === 'object' ? JSON.stringify(product.specs, null, 2) : product.specs,
       compatibility: typeof product.compatibility === 'object' ? JSON.stringify(product.compatibility, null, 2) : product.compatibility,
       is_trending: Boolean(product.is_trending)
     });
+    setImageFile(null);
+    setImagePreview(product.image || '');
+    setRemoveImage(false);
     setEditingId(product.id);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
+    setImageFile(null);
+    setImagePreview('');
+    setRemoveImage(false);
   };
 
   const handleChange = (e) => {
@@ -99,6 +112,56 @@ export default function AdminProducts() {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+  };
+
+  // Image upload handlers
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('Ukuran file maksimal 2MB');
+        return;
+      }
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+      setRemoveImage(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('Ukuran file maksimal 2MB');
+        return;
+      }
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+      setRemoveImage(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleImageRemove = () => {
+    setImageFile(null);
+    setImagePreview('');
+    if (editingId) {
+      setRemoveImage(true);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -128,18 +191,36 @@ export default function AdminProducts() {
         }
       }
 
-      const payload = {
-        ...formData,
-        price: parseInt(formData.price),
-        stock: parseInt(formData.stock),
-        specs: parsedSpecs,
-        compatibility: parsedCompatibility
-      };
+      // Build FormData for multipart upload
+      const fd = new FormData();
+      fd.append('category_id', formData.category_id);
+      fd.append('brand_id', formData.brand_id);
+      fd.append('name', formData.name);
+      fd.append('description', formData.description);
+      fd.append('price', formData.price);
+      fd.append('stock', formData.stock);
+      fd.append('is_trending', formData.is_trending ? '1' : '0');
+
+      if (parsedSpecs) {
+        fd.append('specs', JSON.stringify(parsedSpecs));
+      }
+      if (parsedCompatibility) {
+        fd.append('compatibility', JSON.stringify(parsedCompatibility));
+      }
+
+      // Append image file or removal flag
+      if (imageFile) {
+        fd.append('image_file', imageFile);
+      } else if (removeImage) {
+        fd.append('remove_image', '1');
+      }
 
       if (editingId) {
-        await api.put(`/admin/products/${editingId}`, payload);
+        // Use _method spoofing for PUT with file upload
+        fd.append('_method', 'PUT');
+        await api.post(`/admin/products/${editingId}`, fd);
       } else {
-        await api.post('/admin/products', payload);
+        await api.post('/admin/products', fd);
       }
       closeModal();
       fetchData(); // re-fetch
@@ -362,16 +443,80 @@ export default function AdminProducts() {
                   />
                 </div>
 
+                {/* Image Upload Area */}
                 <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium text-text-main block">URL Gambar (Opsional)</label>
-                  <input
-                    type="url"
-                    name="image"
-                    value={formData.image}
-                    onChange={handleChange}
-                    className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                    placeholder="https://..."
-                  />
+                  <label className="text-sm font-medium text-text-main block">Gambar Produk</label>
+                  <div
+                    className={`relative border-2 border-dashed rounded-xl transition-all duration-200 ${
+                      isDragging
+                        ? 'border-primary bg-blue-50/60 scale-[1.01]'
+                        : 'border-border hover:border-primary/40 hover:bg-surface-lighter/30'
+                    } ${imagePreview ? 'p-3' : 'p-8'}`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
+                    {imagePreview ? (
+                      <div className="flex items-center gap-4">
+                        <div className="w-28 h-28 rounded-lg border border-border overflow-hidden bg-surface-lighter flex-shrink-0 flex items-center justify-center">
+                          <img
+                            src={imagePreview}
+                            alt="Preview"
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-text-main truncate">
+                            {imageFile ? imageFile.name : 'Gambar saat ini'}
+                          </p>
+                          {imageFile && (
+                            <p className="text-xs text-text-muted mt-1">
+                              {(imageFile.size / 1024).toFixed(1)} KB
+                            </p>
+                          )}
+                          <div className="flex gap-2 mt-3">
+                            <label className="px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 rounded-lg cursor-pointer hover:bg-primary/20 transition-colors inline-flex items-center gap-1">
+                              <Upload className="w-3 h-3" />
+                              Ganti Gambar
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                onChange={handleFileChange}
+                                className="hidden"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={handleImageRemove}
+                              className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors inline-flex items-center gap-1"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              Hapus
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer flex flex-col items-center gap-3">
+                        <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
+                          isDragging ? 'bg-primary/20' : 'bg-primary/10'
+                        }`}>
+                          <Upload className={`w-6 h-6 transition-colors ${isDragging ? 'text-primary' : 'text-primary/70'}`} />
+                        </div>
+                        <div className="text-center">
+                          <span className="text-sm font-medium text-primary">Klik untuk upload</span>
+                          <span className="text-sm text-text-muted"> atau seret gambar ke sini</span>
+                        </div>
+                        <p className="text-xs text-text-muted">JPG, PNG, WebP, GIF — Maks. 2MB</p>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          onChange={handleFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2 md:col-span-2">

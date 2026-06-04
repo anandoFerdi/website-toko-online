@@ -1,8 +1,24 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { ShoppingCart, Search, Eye, X, CheckCircle2, Clock, Package, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Search, Eye, X, CheckCircle2, Clock, Package, AlertCircle, Truck, MapPin, Copy, Check, Loader2 } from 'lucide-react';
 import api from '@/lib/api';
+
+const COURIERS = [
+  { code: 'jne',      name: 'JNE' },
+  { code: 'jnt',      name: 'J&T Express' },
+  { code: 'sicepat',  name: 'SiCepat' },
+  { code: 'anteraja', name: 'AnterAja' },
+  { code: 'idx',      name: 'ID Express' },
+  { code: 'tiki',     name: 'TIKI' },
+  { code: 'pos',      name: 'Pos Indonesia' },
+  { code: 'ninja',    name: 'Ninja Express' },
+  { code: 'sap',      name: 'SAP Express' },
+  { code: 'lion',     name: 'Lion Parcel' },
+  { code: 'jx',       name: 'J&T Cargo' },
+  { code: 'rpx',      name: 'RPX' },
+  { code: 'wahana',   name: 'Wahana' },
+];
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState([]);
@@ -12,8 +28,9 @@ export default function AdminOrders() {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [statusForm, setStatusForm] = useState({ status: '', payment_status: '' });
+  const [statusForm, setStatusForm] = useState({ status: '', payment_status: '', tracking_number: '', courier_code: '', courier_name: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -34,21 +51,35 @@ export default function AdminOrders() {
 
   const filteredOrders = orders.filter(o => 
     o.order_number.toLowerCase().includes(search.toLowerCase()) ||
-    o.recipient_name.toLowerCase().includes(search.toLowerCase())
+    o.recipient_name.toLowerCase().includes(search.toLowerCase()) ||
+    (o.tracking_number && o.tracking_number.toLowerCase().includes(search.toLowerCase()))
   );
 
   const openDetailModal = (order) => {
     setSelectedOrder(order);
     setStatusForm({ 
       status: order.status, 
-      payment_status: order.payment_status 
+      payment_status: order.payment_status,
+      tracking_number: order.tracking_number || '',
+      courier_code: order.courier_code || '',
+      courier_name: order.courier_name || '',
     });
     setIsModalOpen(true);
+    setCopied(false);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setSelectedOrder(null);
+  };
+
+  const handleCourierChange = (code) => {
+    const courier = COURIERS.find(c => c.code === code);
+    setStatusForm(prev => ({
+      ...prev,
+      courier_code: code,
+      courier_name: courier ? courier.name : '',
+    }));
   };
 
   const handleUpdateStatus = async (e) => {
@@ -57,22 +88,38 @@ export default function AdminOrders() {
     
     setIsSubmitting(true);
     try {
-      await api.put(`/admin/orders/${selectedOrder.id}/status`, statusForm);
+      const payload = {
+        status: statusForm.status,
+        payment_status: statusForm.payment_status,
+      };
+
+      // Include tracking info if provided
+      if (statusForm.tracking_number) payload.tracking_number = statusForm.tracking_number;
+      if (statusForm.courier_code) payload.courier_code = statusForm.courier_code;
+      if (statusForm.courier_name) payload.courier_name = statusForm.courier_name;
+
+      await api.put(`/admin/orders/${selectedOrder.id}/status`, payload);
       closeModal();
       fetchOrders();
     } catch (error) {
-      alert("Gagal mengupdate status pesanan.");
+      alert(error.response?.data?.message || "Gagal mengupdate status pesanan.");
       console.error(error);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const copyResi = (text) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const getStatusBadge = (status) => {
     switch (status) {
       case 'pending': return <span className="bg-yellow-100 text-yellow-700 px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit"><Clock className="w-3 h-3" /> Pending</span>;
       case 'processing': return <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit"><Package className="w-3 h-3" /> Diproses</span>;
-      case 'shipped': return <span className="bg-purple-100 text-purple-700 px-2.5 py-1 rounded-full text-xs font-medium w-fit">Dikirim</span>;
+      case 'shipped': return <span className="bg-purple-100 text-purple-700 px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit"><Truck className="w-3 h-3" /> Dikirim</span>;
       case 'delivered': return <span className="bg-green-100 text-green-700 px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit"><CheckCircle2 className="w-3 h-3" /> Selesai</span>;
       case 'cancelled': return <span className="bg-red-100 text-red-700 px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit"><AlertCircle className="w-3 h-3" /> Dibatalkan</span>;
       default: return <span className="bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full text-xs font-medium w-fit">{status}</span>;
@@ -87,6 +134,8 @@ export default function AdminOrders() {
       default: return <span className="bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full text-xs font-medium w-fit">{status}</span>;
     }
   };
+
+  const showTrackingFields = statusForm.status === 'shipped' || statusForm.status === 'delivered' || statusForm.tracking_number;
 
   return (
     <div className="p-8">
@@ -105,7 +154,7 @@ export default function AdminOrders() {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
             <input 
               type="text" 
-              placeholder="Cari ID Pesanan / Nama..." 
+              placeholder="Cari ID Pesanan / Nama / Resi..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full bg-white border border-border rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
@@ -126,13 +175,14 @@ export default function AdminOrders() {
                 <th className="px-6 py-4">Total Harga</th>
                 <th className="px-6 py-4">Pembayaran</th>
                 <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4">Resi</th>
                 <th className="px-6 py-4 text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-8 text-center">
+                  <td colSpan="8" className="px-6 py-8 text-center">
                     <div className="flex justify-center"><div className="animate-spin rounded-full h-6 w-6 border-2 border-surface-darker border-t-primary"></div></div>
                   </td>
                 </tr>
@@ -152,6 +202,16 @@ export default function AdminOrders() {
                     </td>
                     <td className="px-6 py-4">{getPaymentBadge(order.payment_status)}</td>
                     <td className="px-6 py-4">{getStatusBadge(order.status)}</td>
+                    <td className="px-6 py-4">
+                      {order.tracking_number ? (
+                        <div className="flex items-center gap-1.5">
+                          <Truck className="w-3.5 h-3.5 text-purple-500" />
+                          <span className="text-xs font-mono font-medium text-text-main">{order.tracking_number}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-text-light">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 flex justify-end">
                       <button 
                         onClick={() => openDetailModal(order)}
@@ -164,7 +224,7 @@ export default function AdminOrders() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" className="px-6 py-8 text-center text-text-muted">
+                  <td colSpan="8" className="px-6 py-8 text-center text-text-muted">
                     Pesanan tidak ditemukan.
                   </td>
                 </tr>
@@ -187,7 +247,7 @@ export default function AdminOrders() {
               </button>
             </div>
             
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8 max-h-[80vh] overflow-y-auto">
               {/* Order Info */}
               <div className="space-y-6">
                 <div>
@@ -209,6 +269,35 @@ export default function AdminOrders() {
                   </div>
                 </div>
 
+                {/* Existing Tracking Info */}
+                {selectedOrder.tracking_number && (
+                  <div>
+                    <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <Truck className="w-4 h-4" /> Info Pengiriman
+                    </h3>
+                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-purple-600">Kurir:</span>
+                        <span className="font-bold text-purple-800">{selectedOrder.courier_name || selectedOrder.courier_code}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-purple-600">No. Resi:</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-purple-800">{selectedOrder.tracking_number}</span>
+                          <button
+                            onClick={() => copyResi(selectedOrder.tracking_number)}
+                            className="p-1 hover:bg-purple-100 rounded transition-colors"
+                            title="Salin nomor resi"
+                          >
+                            {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5 text-purple-500" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Update Status Form */}
                 <div>
                   <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider mb-3">Update Status</h3>
                   <form onSubmit={handleUpdateStatus} className="bg-white p-4 rounded-lg border border-border shadow-sm space-y-4">
@@ -238,12 +327,52 @@ export default function AdminOrders() {
                         <option value="cancelled">Dibatalkan (Cancelled)</option>
                       </select>
                     </div>
+
+                    {/* Tracking fields — shown when status is shipped/delivered or tracking already exists */}
+                    {showTrackingFields && (
+                      <div className="space-y-3 p-4 bg-purple-50/50 rounded-lg border border-purple-200/60">
+                        <h4 className="text-sm font-bold text-purple-700 flex items-center gap-2">
+                          <Truck className="w-4 h-4" /> Informasi Resi
+                          {statusForm.status === 'shipped' && <span className="text-red-500 text-xs font-normal">(Wajib diisi)</span>}
+                        </h4>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-text-main block">Kurir</label>
+                          <select
+                            value={statusForm.courier_code}
+                            onChange={(e) => handleCourierChange(e.target.value)}
+                            className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                            required={statusForm.status === 'shipped'}
+                          >
+                            <option value="">— Pilih Kurir —</option>
+                            {COURIERS.map(c => (
+                              <option key={c.code} value={c.code}>{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-text-main block">Nomor Resi</label>
+                          <input
+                            type="text"
+                            value={statusForm.tracking_number}
+                            onChange={(e) => setStatusForm({...statusForm, tracking_number: e.target.value})}
+                            placeholder="Masukkan nomor resi pengiriman"
+                            className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                            required={statusForm.status === 'shipped'}
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     <button 
                       type="submit" 
                       disabled={isSubmitting}
-                      className="btn-primary w-full mt-2"
+                      className="btn-primary w-full mt-2 flex items-center justify-center gap-2"
                     >
-                      {isSubmitting ? 'Menyimpan...' : 'Update Status'}
+                      {isSubmitting ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</>
+                      ) : (
+                        'Update Status'
+                      )}
                     </button>
                   </form>
                 </div>

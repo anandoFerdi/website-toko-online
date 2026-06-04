@@ -9,12 +9,18 @@ const api = axios.create({
   }
 });
 
-// Request interceptor to add token
+// Request interceptor to add token and handle FormData
 api.interceptors.request.use((config) => {
   const token = Cookies.get('auth_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // Let the browser set Content-Type for FormData (with correct boundary)
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
+
   return config;
 }, (error) => {
   return Promise.reject(error);

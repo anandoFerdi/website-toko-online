@@ -7,7 +7,8 @@ import {
   User, LogOut, Package, Clock, CheckCircle2, AlertCircle,
   ShoppingBag, CreditCard, FileDown, Settings, ChevronRight,
   MapPin, Lock, Mail, Trash2, ShoppingCart, Save, Eye, EyeOff,
-  X
+  X, Truck, MapPinned, Navigation, PackageCheck, Loader2,
+  Copy, Check, RefreshCw
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -19,6 +20,7 @@ const MENU = [
   { id: 'all',       label: 'Semua Pesanan',  icon: ShoppingBag },
   { id: 'pending',   label: 'Belum Dibayar',  icon: Clock       },
   { id: 'paid',      label: 'Dikemas',         icon: Package     },
+  { id: 'shipped',   label: 'Dikirim',         icon: Truck       },
   { id: 'cancelled', label: 'Dibatalkan',      icon: AlertCircle },
   { id: 'settings',  label: 'Pengaturan',      icon: Settings    },
 ];
@@ -83,6 +85,207 @@ const Alert = ({ type, msg, onClose }) => {
   );
 };
 
+// ── Tracking status helpers ───────────────────────────────────
+const TRACKING_STATUS_MAP = {
+  confirmed:    { label: 'Dikonfirmasi',     icon: CheckCircle2, color: 'text-blue-600',    bg: 'bg-blue-100' },
+  allocated:    { label: 'Kurir Ditugaskan', icon: User,         color: 'text-blue-600',    bg: 'bg-blue-100' },
+  pickingUp:    { label: 'Menuju Pickup',    icon: Navigation,   color: 'text-orange-500',  bg: 'bg-orange-100' },
+  picked:       { label: 'Diambil Kurir',    icon: Package,      color: 'text-orange-500',  bg: 'bg-orange-100' },
+  droppingOff:  { label: 'Sedang Diantar',   icon: Truck,        color: 'text-purple-600',  bg: 'bg-purple-100' },
+  inTransit:    { label: 'Dalam Perjalanan', icon: Truck,        color: 'text-purple-600',  bg: 'bg-purple-100' },
+  delivered:    { label: 'Terkirim',         icon: PackageCheck,  color: 'text-green-600',   bg: 'bg-green-100' },
+  onHold:       { label: 'Ditahan',          icon: Clock,        color: 'text-yellow-600',  bg: 'bg-yellow-100' },
+  returned:     { label: 'Dikembalikan',     icon: AlertCircle,  color: 'text-red-500',     bg: 'bg-red-100' },
+  cancelled:    { label: 'Dibatalkan',       icon: X,            color: 'text-red-500',     bg: 'bg-red-100' },
+  rejected:     { label: 'Ditolak',          icon: AlertCircle,  color: 'text-red-500',     bg: 'bg-red-100' },
+  courierNotFound: { label: 'Kurir Tidak Ditemukan', icon: AlertCircle, color: 'text-gray-500', bg: 'bg-gray-100' },
+  disposed:     { label: 'Dibuang',          icon: Trash2,       color: 'text-gray-500',    bg: 'bg-gray-100' },
+};
+
+const getTrackingInfo = (status) => {
+  return TRACKING_STATUS_MAP[status] || { label: status || 'Unknown', icon: Package, color: 'text-gray-500', bg: 'bg-gray-100' };
+};
+
+// ═══════════════════════════════════════════════════════════════
+// TRACKING MODAL
+// ═══════════════════════════════════════════════════════════════
+function TrackingModal({ order, onClose }) {
+  const [tracking, setTracking] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const fetchTracking = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.get(`/orders/${order.id}/tracking`);
+      setTracking(res.data);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Gagal mengambil data tracking.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTracking();
+  }, [order.id]);
+
+  const copyResi = () => {
+    navigator.clipboard.writeText(order.tracking_number);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const trackingStatus = tracking?.courier?.status;
+  const history = tracking?.courier?.history || [];
+  const statusInfo = getTrackingInfo(trackingStatus);
+  const StatusIcon = statusInfo.icon;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        style={{ animation: 'fadeInScale 0.25s ease-out' }}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-5 text-white relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-20 h-20 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+          <div className="relative">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-bold text-lg flex items-center gap-2">
+                <Truck className="w-5 h-5" /> Lacak Paket
+              </h2>
+              <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-lg transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white/70 text-xs mb-0.5">Nomor Resi</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-mono font-bold text-sm tracking-wider">{order.tracking_number}</p>
+                  <button onClick={copyResi} className="p-0.5 hover:bg-white/20 rounded transition-colors" title="Salin">
+                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5 opacity-70" />}
+                  </button>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-white/70 text-xs mb-0.5">Kurir</p>
+                <p className="font-bold text-sm">{order.courier_name || order.courier_code}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="max-h-[55vh] overflow-y-auto">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+              <p className="text-sm text-text-muted">Mengambil data tracking...</p>
+            </div>
+          ) : error ? (
+            <div className="p-6 text-center">
+              <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                <AlertCircle className="w-7 h-7 text-red-400" />
+              </div>
+              <p className="text-sm text-red-600 mb-4">{error}</p>
+              <button onClick={fetchTracking} className="text-sm text-primary font-semibold hover:underline flex items-center gap-1.5 mx-auto">
+                <RefreshCw className="w-3.5 h-3.5" /> Coba Lagi
+              </button>
+            </div>
+          ) : (
+            <div className="p-5">
+              {/* Current status */}
+              <div className={`flex items-center gap-3 p-4 rounded-xl ${statusInfo.bg} mb-5`}>
+                <div className={`w-10 h-10 rounded-full bg-white/80 flex items-center justify-center ${statusInfo.color}`}>
+                  <StatusIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className={`font-bold text-sm ${statusInfo.color}`}>{statusInfo.label}</p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    {tracking?.courier?.waybill_id && `Waybill: ${tracking.courier.waybill_id}`}
+                  </p>
+                </div>
+              </div>
+
+              {/* Timeline */}
+              {history.length > 0 ? (
+                <div className="relative">
+                  <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4">Riwayat Perjalanan</h4>
+                  <div className="space-y-0">
+                    {history.map((item, idx) => {
+                      const isFirst = idx === 0;
+                      const isLast = idx === history.length - 1;
+                      const itemStatus = getTrackingInfo(item.status);
+                      const ItemIcon = itemStatus.icon;
+
+                      return (
+                        <div key={idx} className="flex gap-3">
+                          {/* Timeline line + dot */}
+                          <div className="flex flex-col items-center shrink-0" style={{ width: '28px' }}>
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                              isFirst ? 'bg-purple-600 text-white shadow-lg shadow-purple-200' : 'bg-gray-100 text-gray-400'
+                            }`}>
+                              <ItemIcon className="w-3.5 h-3.5" />
+                            </div>
+                            {!isLast && (
+                              <div className={`w-0.5 flex-1 min-h-[32px] ${isFirst ? 'bg-purple-300' : 'bg-gray-200'}`} />
+                            )}
+                          </div>
+                          {/* Content */}
+                          <div className={`pb-5 flex-1 ${isFirst ? '' : 'opacity-75'}`}>
+                            <p className={`text-sm font-semibold leading-snug ${isFirst ? 'text-text-main' : 'text-text-muted'}`}>
+                              {item.note || itemStatus.label}
+                            </p>
+                            <p className="text-xs text-text-light mt-1">
+                              {item.updated_at ? new Date(item.updated_at).toLocaleDateString('id-ID', {
+                                day: 'numeric', month: 'long', year: 'numeric',
+                                hour: '2-digit', minute: '2-digit'
+                              }) : ''}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <p className="text-sm text-text-muted">Belum ada riwayat perjalanan.</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-border bg-surface-lighter/50 flex justify-between items-center">
+          <p className="text-xs text-text-light">Data dari Biteship</p>
+          <button
+            onClick={fetchTracking}
+            disabled={loading}
+            className="text-xs text-primary font-semibold hover:underline flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          </button>
+        </div>
+      </div>
+
+      <style jsx>{`
+        @keyframes fadeInScale {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ═══════════════════════════════════════════════════════════════
@@ -91,6 +294,7 @@ export default function ProfilePage() {
   const [orders, setOrders]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab]         = useState('all');
+  const [trackingOrder, setTrackingOrder] = useState(null);
   const router = useRouter();
   const snapLoaded = useRef(false);
 
@@ -165,7 +369,8 @@ export default function ProfilePage() {
   const filteredOrders = () => {
     if (tab === 'all')       return orders;
     if (tab === 'pending')   return orders.filter(o => o.payment_status === 'unpaid' && o.status !== 'cancelled');
-    if (tab === 'paid')      return orders.filter(o => o.payment_status === 'paid');
+    if (tab === 'paid')      return orders.filter(o => o.payment_status === 'paid' && o.status !== 'shipped' && o.status !== 'delivered');
+    if (tab === 'shipped')   return orders.filter(o => o.status === 'shipped' || o.status === 'delivered');
     if (tab === 'cancelled') return orders.filter(o => o.status === 'cancelled');
     return orders;
   };
@@ -234,6 +439,7 @@ export default function ProfilePage() {
                 onCancel={cancelOrder}
                 onRefresh={refreshPayment}
                 onInvoice={downloadInvoice}
+                onTrack={(order) => setTrackingOrder(order)}
                 onShop={() => router.push('/')}
               />
             ) : (
@@ -242,6 +448,11 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Tracking Modal */}
+      {trackingOrder && (
+        <TrackingModal order={trackingOrder} onClose={() => setTrackingOrder(null)} />
+      )}
     </div>
   );
 }
@@ -249,7 +460,7 @@ export default function ProfilePage() {
 // ═══════════════════════════════════════════════════════════════
 // ORDERS PANEL
 // ═══════════════════════════════════════════════════════════════
-function OrdersPanel({ orders, tabLabel, onPayNow, onCancel, onRefresh, onInvoice, onShop }) {
+function OrdersPanel({ orders, tabLabel, onPayNow, onCancel, onRefresh, onInvoice, onTrack, onShop }) {
   if (orders.length === 0) return (
     <div className="bg-white rounded-2xl border border-border shadow-sm p-12 flex flex-col items-center text-center">
       <div className="w-16 h-16 bg-surface-lighter rounded-full flex items-center justify-center mb-4">
@@ -296,6 +507,25 @@ function OrdersPanel({ orders, tabLabel, onPayNow, onCancel, onRefresh, onInvoic
             ))}
           </div>
 
+          {/* Tracking info bar */}
+          {order.tracking_number && (
+            <div className="mx-5 mb-3 flex items-center gap-3 p-3 bg-purple-50 rounded-xl border border-purple-200/60">
+              <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center shrink-0">
+                <Truck className="w-4 h-4 text-purple-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-purple-600 font-medium">{order.courier_name || order.courier_code}</p>
+                <p className="text-sm font-mono font-bold text-purple-800 tracking-wider">{order.tracking_number}</p>
+              </div>
+              <button
+                onClick={() => onTrack(order)}
+                className="px-3 py-1.5 bg-purple-600 text-white hover:bg-purple-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 shrink-0"
+              >
+                <MapPinned className="w-3.5 h-3.5" /> Lacak
+              </button>
+            </div>
+          )}
+
           {/* Footer */}
           <div className="flex flex-wrap justify-between items-center gap-3 px-5 py-3.5 border-t border-border">
             <div>
@@ -334,6 +564,15 @@ function OrdersPanel({ orders, tabLabel, onPayNow, onCancel, onRefresh, onInvoic
                   className="px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-600 hover:text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
                 >
                   <FileDown className="w-3.5 h-3.5" /> Invoice PDF
+                </button>
+              )}
+              {/* Lacak Paket button for shipped/delivered orders */}
+              {(order.status === 'shipped' || order.status === 'delivered') && order.tracking_number && (
+                <button
+                  onClick={() => onTrack(order)}
+                  className="px-3 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
+                >
+                  <MapPinned className="w-3.5 h-3.5" /> Lacak Paket
                 </button>
               )}
             </div>
