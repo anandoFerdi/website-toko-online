@@ -7,6 +7,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\TestimonialController;
 use Illuminate\Support\Facades\Route;
 
 // Midtrans Webhook (public, no auth needed - Midtrans calls this)
@@ -21,6 +22,8 @@ Route::post('/midtrans/notification', [OrderController::class, 'handleNotificati
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+
+Route::get('/testimonials', [TestimonialController::class, 'index']);
 
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/trending', [ProductController::class, 'trending']);
@@ -39,6 +42,8 @@ Route::post('/ai/compatibility', [AIController::class, 'checkCompatibility']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/testimonials', [TestimonialController::class, 'store']);
+    
     // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);

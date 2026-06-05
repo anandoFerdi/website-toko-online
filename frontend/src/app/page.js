@@ -1,9 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Bot, Cpu, Zap, ArrowRight, ShieldCheck, Wrench, Star, Truck, CreditCard, HeadphonesIcon, Package, ChevronRight } from "lucide-react";
 import ProductSlider from "@/components/home/ProductSlider";
+import api from "@/lib/api";
 
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 24 },
@@ -51,11 +53,27 @@ export default function Home() {
     { icon: <HeadphonesIcon className="w-5 h-5 text-primary" />, title: "Dukungan 24/7", desc: "Siap membantu kapanpun" },
   ];
 
-  const testimonials = [
+  const defaultTestimonials = [
     { name: "Andi Pratama", role: "Content Creator", rating: 5, comment: "AI Builder-nya luar biasa! Langsung dapat rekomendasi GPU yang cocok dengan budget saya. Pengirimannya juga cepat banget." },
     { name: "Rina Susanti", role: "Software Developer", rating: 5, comment: "Fitur cek kompatibilitas sangat membantu. Saya jadi yakin sebelum beli motherboard dan RAM. Harga juga bersaing!" },
     { name: "Budi Santoso", role: "Gamer", rating: 5, comment: "Udah 3 kali order di sini dan selalu puas. Produknya original semua, packaging aman, dan CS responsif." },
   ];
+
+  const [testimonials, setTestimonials] = useState(defaultTestimonials);
+
+  useEffect(() => {
+    const fetchTestimonials = async () => {
+      try {
+        const { data } = await api.get('/testimonials');
+        if (data && data.length > 0) {
+          setTestimonials(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch testimonials:', error);
+      }
+    };
+    fetchTestimonials();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -72,19 +90,19 @@ export default function Home() {
 
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-text-main leading-tight mb-5">
                 Rakit PC Impianmu <br />
-                <span className="text-primary">Harga Terbaik</span>,<br />
+                <span className="text-primary">Harga Terbaik</span><br />
                 <span className="text-secondary text-3xl md:text-4xl font-bold">Dibantu AI ✨</span>
               </h1>
 
-              <p className="text-text-muted text-lg leading-relaxed mb-8 max-w-xl">
+              <p className="text-slate-700 text-lg leading-relaxed mb-8 max-w-xl">
                 Temukan ribuan komponen PC original bergaransi dari brand terkemuka. Bingung merakit? Biarkan asisten AI kami yang membimbing.
               </p>
 
               <div className="flex flex-wrap gap-3">
-                <Link href="/products" className="btn-primary flex items-center gap-2 text-base">
+                <Link href="/products" className="btn-primary flex items-center gap-2 text-base shadow-md transition-all duration-200 hover:shadow-lg">
                   Belanja Sekarang <ArrowRight className="w-4 h-4" />
                 </Link>
-                <Link href="/ai-builder" className="btn-secondary flex items-center gap-2 text-base border-secondary/40 text-secondary hover:bg-secondary-light">
+                <Link href="/ai-builder" className="bg-white border border-slate-200 text-slate-700 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-700 transition-all duration-200 px-6 py-3 rounded-lg flex items-center gap-2 text-base font-medium shadow-sm">
                   <Bot className="w-4 h-4" /> Coba AI Builder
                 </Link>
               </div>
@@ -118,20 +136,20 @@ export default function Home() {
                       { icon: <Package className="w-8 h-8 text-orange-500" />, label: "RAM", price: "Rp 980rb" },
                       { icon: <Package className="w-8 h-8 text-green-500" />, label: "SSD", price: "Rp 750rb" },
                     ].map((item, i) => (
-                      <div key={i} className="bg-white rounded-xl p-4 shadow-card text-center">
-                        <div className="flex justify-center mb-2">{item.icon}</div>
-                        <div className="text-xs font-bold text-text-main">{item.label}</div>
-                        <div className="text-xs text-primary font-semibold">{item.price}</div>
+                      <div key={i} className="bg-white rounded-xl p-5 shadow-card text-center flex flex-col items-center justify-center hover:-translate-y-1 transition-all duration-200">
+                        <div className="flex justify-center mb-3">{item.icon}</div>
+                        <div className="text-xs font-bold text-text-main mb-1">{item.label}</div>
+                        <div className="text-sm text-primary font-semibold">{item.price}</div>
                       </div>
                     ))}
                   </div>
                 </div>
                 {/* AI badge floating */}
-                <div className="absolute -bottom-4 -right-4 bg-secondary text-white px-4 py-2 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2">
+                <div className="absolute -bottom-5 -right-5 bg-secondary text-white px-4 py-2 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2 hover:scale-105 transition-all duration-200">
                   <Bot className="w-4 h-4" /> AI Powered
                 </div>
-                <div className="absolute -top-4 -left-4 bg-white border border-border rounded-xl px-3 py-2 shadow-card text-xs font-bold text-text-main flex items-center gap-2">
-                  <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" /> Garansi Resmi
+                <div className="absolute -top-5 -left-5 bg-white border border-border rounded-xl px-4 py-2.5 shadow-card text-xs font-bold text-text-main flex items-center gap-2 hover:scale-105 transition-all duration-200 z-10">
+                  <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" /> Garansi Resmi
                 </div>
               </div>
             </motion.div>
