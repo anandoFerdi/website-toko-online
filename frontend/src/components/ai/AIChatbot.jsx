@@ -52,8 +52,7 @@ export default function AIChatbot() {
   };
 
   return (
-    <div className="font-sans antialiased bg-slate-100 min-h-screen p-8 flex flex-col justify-between">
-
+    <>
       {/* --- 1. FLOATING BUTTON WITH MASCOT --- */}
       <AnimatePresence>
         {!isOpen && (
@@ -104,10 +103,10 @@ export default function AIChatbot() {
                   animate={{ opacity: 1, x: 0, scale: 1 }}
                   exit={{ opacity: 0, x: 28, scale: 0.8 }}
                   transition={{ type: 'spring', bounce: 0.35, duration: 0.5 }}
-                  className="mr-2 shrink-0 self-end drop-shadow-xl"
-                  style={{ height: '470px', width: '110px' }}
+                  className="mr-2 shrink-0 self-end drop-shadow-2xl rounded-[3rem] bg-slate-900/60 backdrop-blur-md border border-white/10 overflow-hidden"
+                  style={{ height: '470px', width: '180px' }}
                 >
-                  <AIChatMascot isStatusTyping={loading} size="side" bgClass="bg-slate-700" borderClass="border-slate-600" />
+                  <AIChatMascot isStatusTyping={loading} size="side" />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -267,6 +266,6 @@ export default function AIChatbot() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 }

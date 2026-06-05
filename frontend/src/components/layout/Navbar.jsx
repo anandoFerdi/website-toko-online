@@ -55,11 +55,11 @@ export default function Navbar() {
   return (
     <>
       {/* Top announcement bar */}
-      <div className="bg-primary text-white text-center py-2 text-xs font-medium tracking-wide">
-        🚚 Gratis Ongkir untuk pembelian di atas Rp 500.000 &nbsp;·&nbsp; 🤖 Fitur AI Builder tersedia — <Link href="/ai-builder" className="underline underline-offset-2 hover:text-blue-100">Coba Sekarang</Link>
+      <div className="bg-primary text-white text-center py-3 text-xs font-medium tracking-wide">
+        🚚 Gratis Ongkir untuk pembelian di atas Rp 500.000 &nbsp;·&nbsp; 🤖 Fitur AI Builder tersedia — <Link href="/ai-builder" className="underline underline-offset-2 hover:text-blue-100 transition-all duration-200">Coba Sekarang</Link>
       </div>
 
-      <nav className={`fixed w-full z-50 transition-all duration-300 ${isScrolled ? 'bg-white shadow-nav top-0' : 'bg-white/95 backdrop-blur-sm top-7'} border-b border-border`}>
+      <nav className={`fixed w-full z-50 transition-all duration-300 ${isScrolled ? 'bg-white shadow-nav top-0' : 'bg-white/95 backdrop-blur-sm top-10'} border-b border-border`}>
         <div className="container mx-auto px-4 md:px-8">
           <div className="flex justify-between items-center h-16">
 
@@ -115,8 +115,8 @@ export default function Navbar() {
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <Link href="/login" className="px-4 py-2 text-sm font-medium text-text-main hover:text-primary transition-colors">Masuk</Link>
-                  <Link href="/register" className="btn-primary py-2 text-sm">Daftar</Link>
+                  <Link href="/login" className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-primary transition-all duration-200">Masuk</Link>
+                  <Link href="/register" className="border border-primary text-primary bg-transparent hover:bg-primary/5 transition-all duration-200 py-2 px-4 rounded-lg text-sm font-medium">Daftar</Link>
                 </div>
               )}
             </div>
@@ -170,7 +170,7 @@ export default function Navbar() {
       </nav>
 
       {/* Offset for announcement bar */}
-      <div className="h-7" />
+      <div className="h-10" />
     </>
   );
 }
