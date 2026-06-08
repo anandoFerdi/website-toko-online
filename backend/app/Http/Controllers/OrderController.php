@@ -280,9 +280,19 @@ class OrderController extends Controller
                     ]);
 
                     $validated['biteship_order_id'] = $biteshipResponse['id'] ?? null;
-                    $validated['biteship_waybill_id'] = $biteshipResponse['waybill_id'] ?? null;
 
-                    Log::info('Biteship order created for order ' . $order->order_number . ': ' . json_encode($biteshipResponse));
+                    // Biteship returns waybill_id nested under courier.waybill_id
+                    // (not at root level — root waybill_id is usually null)
+                    $waybillId = $biteshipResponse['courier']['waybill_id']
+                        ?? $biteshipResponse['courier']['tracking_id']
+                        ?? $biteshipResponse['waybill_id']
+                        ?? null;
+                    $validated['biteship_waybill_id'] = $waybillId;
+
+                    Log::info('Biteship order created for order ' . $order->order_number
+                        . ' | biteship_id=' . ($validated['biteship_order_id'] ?? '-')
+                        . ' | waybill=' . ($waybillId ?? 'NULL')
+                        . ' | raw=' . json_encode($biteshipResponse));
                 } catch (\Exception $e) {
                     Log::error('Failed to create Biteship order for ' . $order->order_number . ': ' . $e->getMessage());
                     // Don't block the status update — just log the error
@@ -449,5 +459,67 @@ class OrderController extends Controller
 
         $pdf = Pdf::loadView('invoice', compact('order'));
         return $pdf->download('invoice-' . $order->order_number . '.pdf');
+    }
+
+    public function retryBiteship(Request $request, $id): JsonResponse
+    {
+        $order = Order::with('items.product')->findOrFail($id);
+
+        if ($order->biteship_order_id && $order->biteship_waybill_id) {
+            return response()->json(['message' => 'Order ini sudah memiliki resi pengiriman.'], 400);
+        }
+
+        if ($order->status !== 'shipped' && $order->status !== 'delivered') {
+            return response()->json(['message' => 'Hanya order dengan status Dikirim yang bisa dibuatkan resi.'], 400);
+        }
+
+        if (!$order->destination_area_id || !$order->courier_company || !$order->courier_service) {
+             return response()->json(['message' => 'Data kurir atau area pengiriman tidak lengkap.'], 400);
+        }
+
+        try {
+            $itemsData = $order->items->map(fn($item) => [
+                'product_id'   => $item->product_id,
+                'product_name' => $item->product?->name ?? 'Produk',
+                'price'        => (int) $item->price,
+                'weight'       => $item->product?->weight ?? 500,
+                'quantity'     => $item->quantity,
+            ])->toArray();
+
+            $biteshipResponse = $this->biteship->createOrder([
+                'order_number'         => $order->order_number,
+                'recipient_name'       => $order->recipient_name,
+                'recipient_phone'      => $order->recipient_phone,
+                'shipping_address'     => $order->shipping_address,
+                'notes'                => $order->notes,
+                'destination_area_id'  => $order->destination_area_id,
+                'shipping_postal_code'  => $order->shipping_postal_code,
+                'shipping_lat'         => $order->shipping_lat,
+                'shipping_lng'         => $order->shipping_lng,
+                'courier_company'      => $order->courier_company,
+                'courier_service'      => $order->courier_service,
+                'items'                => $itemsData,
+            ]);
+
+            $biteshipOrderId = $biteshipResponse['id'] ?? null;
+            $waybillId = $biteshipResponse['courier']['waybill_id']
+                ?? $biteshipResponse['courier']['tracking_id']
+                ?? $biteshipResponse['waybill_id']
+                ?? null;
+
+            $order->update([
+                'biteship_order_id' => $biteshipOrderId,
+                'biteship_waybill_id' => $waybillId,
+            ]);
+
+            return response()->json([
+                'message' => 'Resi berhasil dibuat ulang!',
+                'order' => $order->fresh()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal membuat resi: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

@@ -98,6 +98,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Orders Management
         Route::get('/orders', [OrderController::class, 'adminIndex']);
         Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus']);
+        Route::post('/orders/{id}/retry-biteship', [OrderController::class, 'retryBiteship']);
         Route::get('/orders/{id}/tracking', [ShippingController::class, 'trackOrder']);
         Route::get('/orders/{id}/label', [ShippingController::class, 'downloadLabel']);
 

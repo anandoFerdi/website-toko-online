@@ -170,8 +170,8 @@ class BiteshipService
             'destination_area_id'       => $data['destination_area_id'],
             'destination_postal_code'   => $data['shipping_postal_code'] ?? '',
 
-            'courier_company'  => $data['courier_company'],
-            'courier_type'     => $data['courier_service'],
+            'courier_company'  => strtolower($data['courier_company']),
+            'courier_type'     => (strtolower($data['courier_company']) === 'jnt' && strtolower($data['courier_service']) === 'reg') ? 'ez' : strtolower($data['courier_service']),
             'delivery_type'    => 'now',
             'order_note'       => $data['notes'] ?? '',
 

@@ -7,7 +7,8 @@ import {
   User, LogOut, Package, Clock, CheckCircle2, AlertCircle,
   ShoppingBag, CreditCard, FileDown, Settings, ChevronRight,
   MapPin, Lock, Mail, Trash2, ShoppingCart, Save, Eye, EyeOff,
-  X, Star, Truck
+  X, Star, Truck, CheckCheck, Search, MapPinned, Navigation,
+  ArrowLeft, Info, Receipt, RefreshCw
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -16,12 +17,13 @@ const MIDTRANS_SNAP_URL = 'https://app.sandbox.midtrans.com/snap/snap.js';
 
 // ── Sidebar menu config ───────────────────────────────────────
 const MENU = [
-  { id: 'all',       label: 'Semua Pesanan',  icon: ShoppingBag },
-  { id: 'pending',   label: 'Belum Dibayar',  icon: Clock       },
-  { id: 'paid',      label: 'Dikemas',         icon: Package     },
-  { id: 'shipped',   label: 'Dikirim',         icon: Truck       },
-  { id: 'cancelled', label: 'Dibatalkan',      icon: AlertCircle },
-  { id: 'settings',  label: 'Pengaturan',      icon: Settings    },
+  { id: 'all',       label: 'Semua Pesanan',   icon: ShoppingBag  },
+  { id: 'pending',   label: 'Belum Dibayar',   icon: Clock        },
+  { id: 'paid',      label: 'Dikemas',          icon: Package      },
+  { id: 'shipped',   label: 'Dikirim',          icon: Truck        },
+  { id: 'completed', label: 'Pesanan Selesai',  icon: CheckCheck   },
+  { id: 'cancelled', label: 'Dibatalkan',       icon: AlertCircle  },
+  { id: 'settings',  label: 'Pengaturan',       icon: Settings     },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -85,6 +87,398 @@ const Alert = ({ type, msg, onClose }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// ORDER DETAIL MODAL
+// ═══════════════════════════════════════════════════════════════
+function OrderDetailModal({ order, onClose, onPayNow, onCancel, onRefresh, onInvoice }) {
+  const [trackingData, setTrackingData] = useState(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingError, setTrackingError] = useState('');
+  const [activeTab, setActiveTab] = useState(order._openTab || 'detail');
+
+  const isShipped = order.status === 'shipped' || order.status === 'delivered';
+
+  const loadTracking = async () => {
+    if (!order.biteship_waybill_id) return;
+    setTrackingLoading(true);
+    setTrackingError('');
+    try {
+      const res = await api.get(`/shipping/track`, {
+        params: {
+          waybill_id: order.biteship_waybill_id,
+          courier_code: order.courier_company || '',
+        }
+      });
+      setTrackingData(res.data);
+    } catch (e) {
+      setTrackingError(e.response?.data?.message || 'Gagal memuat data pelacakan.');
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isShipped && activeTab === 'tracking') {
+      loadTracking();
+    }
+  }, [activeTab]);
+
+  const tabs = [
+    { id: 'detail',  label: 'Detail Pesanan', icon: Receipt },
+    { id: 'payment', label: 'Detail Pembayaran', icon: CreditCard },
+    ...(isShipped ? [{ id: 'shipping', label: 'Pengiriman', icon: Truck }, { id: 'tracking', label: 'Lacak Paket', icon: Navigation }] : []),
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl relative flex flex-col max-h-[90vh]"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+          <div>
+            <h3 className="text-lg font-bold text-text-main">{order.order_number}</h3>
+            <div className="flex items-center gap-2 mt-1">
+              <StatusBadge status={order.status} />
+              <PaymentBadge status={order.payment_status} />
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-border shrink-0 overflow-x-auto">
+          {tabs.map(t => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`flex items-center gap-2 px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${
+                  activeTab === t.id ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-main'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" /> {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Content */}
+        <div className="overflow-y-auto flex-1 p-6">
+
+          {/* ── Detail Pesanan ── */}
+          {activeTab === 'detail' && (
+            <div className="space-y-5">
+              <div>
+                <p className="text-xs text-text-muted mb-1">Tanggal Pesanan</p>
+                <p className="text-sm font-medium text-text-main">
+                  {new Date(order.created_at).toLocaleDateString('id-ID', {
+                    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                  })}
+                </p>
+              </div>
+
+              {/* Items */}
+              <div>
+                <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">Produk</p>
+                <div className="space-y-3">
+                  {order.items?.map(item => (
+                    <div key={item.id} className="flex gap-3 p-3 bg-surface-lighter/60 rounded-xl border border-border">
+                      <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0 border border-border p-1">
+                        {item.product?.image
+                          ? <img src={item.product.image} alt={item.product.name} className="max-w-full max-h-full object-contain mix-blend-multiply" />
+                          : <Package className="w-5 h-5 text-text-light" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-text-main text-sm line-clamp-1">{item.product?.name || 'Produk dihapus'}</p>
+                        <p className="text-text-muted text-xs mt-0.5">{item.quantity} × Rp {fmt(item.price)}</p>
+                        <p className="text-primary text-xs font-semibold mt-0.5">Rp {fmt(item.quantity * item.price)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Alamat */}
+              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5" /> Alamat Pengiriman
+                </p>
+                <p className="text-sm font-medium text-text-main">{order.recipient_name}</p>
+                <p className="text-sm text-text-muted">{order.recipient_phone}</p>
+                <p className="text-sm text-text-muted mt-1">{order.shipping_address}</p>
+                {order.notes && <p className="text-xs text-text-light mt-2 italic">Catatan: {order.notes}</p>}
+              </div>
+
+              {/* Ringkasan harga */}
+              <div className="border border-border rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 bg-surface-lighter/50 border-b border-border">
+                  <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Ringkasan Harga</p>
+                </div>
+                <div className="p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-text-muted">Subtotal Produk</span>
+                    <span className="font-medium text-text-main">Rp {fmt(order.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-text-muted">Ongkos Kirim</span>
+                    <span className="font-medium text-text-main">
+                      {parseInt(order.shipping_cost) === 0 ? (
+                        <span className="text-green-600">Gratis</span>
+                      ) : `Rp ${fmt(order.shipping_cost)}`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold border-t border-border pt-2 mt-2">
+                    <span className="text-text-main">Total</span>
+                    <span className="text-primary">Rp {fmt(order.total_price)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Detail Pembayaran ── */}
+          {activeTab === 'payment' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl border border-border space-y-3">
+                <InfoRow label="Nomor Pesanan" value={order.order_number} />
+                <InfoRow label="Status Pembayaran" value={
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                    order.payment_status === 'paid' ? 'bg-green-100 text-green-700' :
+                    order.payment_status === 'unpaid' ? 'bg-orange-100 text-orange-700' :
+                    'bg-gray-100 text-gray-600'
+                  }`}>
+                    {order.payment_status === 'paid' ? 'Lunas' : order.payment_status === 'unpaid' ? 'Belum Dibayar' : 'Dikembalikan'}
+                  </span>
+                } />
+                <InfoRow label="Metode Pembayaran" value={order.payment_method ? order.payment_method.toUpperCase() : '-'} />
+                <InfoRow label="ID Transaksi Midtrans" value={order.midtrans_order_id || '-'} mono />
+                <div className="border-t border-border pt-3 mt-1">
+                  <InfoRow label="Subtotal Produk" value={`Rp ${fmt(order.subtotal)}`} />
+                  <div className="mt-2">
+                    <InfoRow label="Ongkos Kirim" value={parseInt(order.shipping_cost) === 0 ? 'Gratis' : `Rp ${fmt(order.shipping_cost)}`} />
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold text-text-main">Total Pembayaran</span>
+                      <span className="text-lg font-bold text-primary">Rp {fmt(order.total_price)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tombol aksi pembayaran */}
+              <div className="flex flex-wrap gap-2">
+                {order.payment_status === 'unpaid' && order.status !== 'cancelled' && (
+                  <>
+                    <button
+                      onClick={() => { onClose(); onCancel(order.id); }}
+                      className="flex-1 px-4 py-2.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-xl text-sm font-semibold transition-colors border border-red-100"
+                    >
+                      Batalkan Pesanan
+                    </button>
+                    <button
+                      onClick={() => { onClose(); onPayNow(order.id, order.midtrans_token); }}
+                      className="flex-1 px-4 py-2.5 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                    >
+                      <CreditCard className="w-4 h-4" /> Bayar Sekarang
+                    </button>
+                  </>
+                )}
+                {order.payment_status === 'paid' && (
+                  <button
+                    onClick={() => { onClose(); onInvoice(order.id, order.order_number); }}
+                    className="flex-1 px-4 py-2.5 bg-green-50 text-green-700 hover:bg-green-600 hover:text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <FileDown className="w-4 h-4" /> Unduh Invoice PDF
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Detail Pengiriman ── */}
+          {activeTab === 'shipping' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl border border-border space-y-3">
+                <p className="text-xs font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                  <Truck className="w-3.5 h-3.5" /> Informasi Pengiriman
+                </p>
+                <InfoRow label="Jasa Pengiriman" value={order.courier_company ? order.courier_company.toUpperCase() : '-'} />
+                <InfoRow label="Layanan" value={order.courier_service_name || order.courier_service || '-'} />
+                <InfoRow label="Nomor Resi (AWB)" value={order.biteship_waybill_id || 'Belum tersedia'} mono highlight={!!order.biteship_waybill_id} />
+                {order.biteship_order_id && (
+                  <InfoRow label="ID Order Pengiriman" value={order.biteship_order_id} mono />
+                )}
+              </div>
+
+              <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5" /> Alamat Tujuan
+                </p>
+                <p className="text-sm font-medium text-text-main">{order.recipient_name}</p>
+                <p className="text-sm text-text-muted">{order.recipient_phone}</p>
+                <p className="text-sm text-text-muted mt-1">{order.shipping_address}</p>
+                {(order.shipping_city || order.shipping_province) && (
+                  <p className="text-xs text-text-light mt-1">
+                    {[order.shipping_village, order.shipping_district, order.shipping_city, order.shipping_province, order.shipping_postal_code]
+                      .filter(Boolean).join(', ')}
+                  </p>
+                )}
+              </div>
+
+              {order.biteship_waybill_id && (
+                <button
+                  onClick={() => setActiveTab('tracking')}
+                  className="w-full px-4 py-3 bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 border border-purple-100"
+                >
+                  <Navigation className="w-4 h-4" /> Lacak Posisi Paket
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Lacak Paket ── */}
+          {activeTab === 'tracking' && (
+            <div className="space-y-4">
+              {/* Info ringkas */}
+              <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-xl border border-purple-100">
+                <Truck className="w-8 h-8 text-purple-600 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-text-main">{order.courier_company?.toUpperCase() || 'Kurir'}</p>
+                  <p className="text-xs text-text-muted font-mono truncate">{order.biteship_waybill_id || '-'}</p>
+                </div>
+                <button
+                  onClick={loadTracking}
+                  disabled={trackingLoading}
+                  className="ml-auto p-2 rounded-lg bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors shrink-0"
+                  title="Refresh tracking"
+                >
+                  <RefreshCw className={`w-4 h-4 ${trackingLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {trackingLoading && (
+                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-4 border-purple-100 border-t-purple-600" />
+                  <p className="text-sm text-text-muted">Mengambil data pelacakan...</p>
+                </div>
+              )}
+
+              {trackingError && !trackingLoading && (
+                <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-center">
+                  <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+                  <p className="text-sm text-red-600">{trackingError}</p>
+                  <button onClick={loadTracking} className="mt-3 text-xs text-primary hover:underline">Coba Lagi</button>
+                </div>
+              )}
+
+              {!trackingLoading && !trackingError && trackingData && (
+                <div className="space-y-4">
+                  {/* Status terkini */}
+                  <div className="p-4 rounded-xl border border-border">
+                    <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">Status Terkini</p>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center shrink-0">
+                        <MapPinned className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-text-main capitalize">
+                          {trackingData.status || trackingData.delivery_status || '-'}
+                        </p>
+                        {trackingData.note && <p className="text-xs text-text-muted mt-0.5">{trackingData.note}</p>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Riwayat tracking */}
+                  {(trackingData.history || trackingData.activities || trackingData.events)?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">Riwayat Perjalanan</p>
+                      <div className="relative">
+                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+                        <div className="space-y-4">
+                          {(trackingData.history || trackingData.activities || trackingData.events).map((event, idx) => (
+                            <div key={idx} className="flex gap-4 relative">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 border-2 ${
+                                idx === 0 ? 'bg-purple-600 border-purple-600' : 'bg-white border-border'
+                              }`}>
+                                {idx === 0
+                                  ? <Navigation className="w-3.5 h-3.5 text-white" />
+                                  : <div className="w-2 h-2 bg-border rounded-full" />
+                                }
+                              </div>
+                              <div className="flex-1 pb-2">
+                                <p className={`text-sm font-medium ${idx === 0 ? 'text-text-main' : 'text-text-muted'}`}>
+                                  {event.note || event.description || event.status || '-'}
+                                </p>
+                                {(event.location || event.city) && (
+                                  <p className="text-xs text-text-light flex items-center gap-1 mt-0.5">
+                                    <MapPin className="w-3 h-3" /> {event.location || event.city}
+                                  </p>
+                                )}
+                                {(event.updated_at || event.created_at || event.time || event.date) && (
+                                  <p className="text-xs text-text-light mt-0.5">
+                                    {new Date(event.updated_at || event.created_at || event.time || event.date)
+                                      .toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Jika tidak ada history */}
+                  {!(trackingData.history || trackingData.activities || trackingData.events)?.length && (
+                    <div className="text-center py-6">
+                      <Navigation className="w-10 h-10 text-text-light mx-auto mb-2" />
+                      <p className="text-sm text-text-muted">Data riwayat perjalanan belum tersedia.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!trackingLoading && !trackingError && !trackingData && (
+                <div className="text-center py-8">
+                  <Search className="w-10 h-10 text-text-light mx-auto mb-2" />
+                  <p className="text-sm text-text-muted">Klik refresh untuk memuat data tracking.</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-border shrink-0 flex justify-end">
+          <button onClick={onClose} className="px-5 py-2 rounded-xl bg-surface-lighter text-text-muted hover:bg-border text-sm font-semibold transition-colors">
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Helper row ─────────────────────────────────────────────────
+function InfoRow({ label, value, mono = false, highlight = false }) {
+  return (
+    <div className="flex justify-between items-start gap-4">
+      <span className="text-xs text-text-muted shrink-0">{label}</span>
+      <span className={`text-xs text-right font-medium ${mono ? 'font-mono' : ''} ${highlight ? 'text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md' : 'text-text-main'}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ═══════════════════════════════════════════════════════════════
 export default function ProfilePage() {
@@ -92,6 +486,7 @@ export default function ProfilePage() {
   const [orders, setOrders]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab]         = useState('all');
+  const [selectedOrder, setSelectedOrder] = useState(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [newReview, setNewReview] = useState({ name: '', role: '', rating: 5, comment: '' });
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
@@ -171,7 +566,8 @@ export default function ProfilePage() {
     if (tab === 'all')       return orders;
     if (tab === 'pending')   return orders.filter(o => o.payment_status === 'unpaid' && o.status !== 'cancelled');
     if (tab === 'paid')      return orders.filter(o => o.payment_status === 'paid' && o.status === 'processing');
-    if (tab === 'shipped')   return orders.filter(o => o.status === 'shipped' || o.status === 'delivered');
+    if (tab === 'shipped')   return orders.filter(o => o.status === 'shipped');
+    if (tab === 'completed') return orders.filter(o => o.status === 'delivered');
     if (tab === 'cancelled') return orders.filter(o => o.status === 'cancelled');
     return orders;
   };
@@ -254,11 +650,13 @@ export default function ProfilePage() {
               <OrdersPanel
                 orders={filteredOrders()}
                 tabLabel={MENU.find(m => m.id === tab)?.label}
+                tab={tab}
                 onPayNow={payNow}
                 onCancel={cancelOrder}
                 onRefresh={refreshPayment}
                 onInvoice={downloadInvoice}
                 onShop={() => router.push('/')}
+                onSelectOrder={setSelectedOrder}
               />
             ) : (
               <SettingsPanel user={user} onUpdated={loadData} onLogout={handleLogout} />
@@ -266,6 +664,18 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* ── ORDER DETAIL MODAL ── */}
+      {selectedOrder && (
+        <OrderDetailModal
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
+          onPayNow={payNow}
+          onCancel={cancelOrder}
+          onRefresh={refreshPayment}
+          onInvoice={downloadInvoice}
+        />
+      )}
 
       {/* ── REVIEW MODAL ── */}
       {isReviewModalOpen && (
@@ -366,7 +776,7 @@ export default function ProfilePage() {
 // ═══════════════════════════════════════════════════════════════
 // ORDERS PANEL
 // ═══════════════════════════════════════════════════════════════
-function OrdersPanel({ orders, tabLabel, onPayNow, onCancel, onRefresh, onInvoice, onShop }) {
+function OrdersPanel({ orders, tabLabel, tab, onPayNow, onCancel, onRefresh, onInvoice, onShop, onSelectOrder }) {
   if (orders.length === 0) return (
     <div className="bg-white rounded-2xl border border-border shadow-sm p-12 flex flex-col items-center text-center">
       <div className="w-16 h-16 bg-surface-lighter rounded-full flex items-center justify-center mb-4">
@@ -378,10 +788,27 @@ function OrdersPanel({ orders, tabLabel, onPayNow, onCancel, onRefresh, onInvoic
     </div>
   );
 
+  // Tabs yang memiliki fitur detail klik
+  const clickable = ['pending', 'paid', 'shipped', 'completed', 'all'];
+  const isClickable = clickable.includes(tab);
+
   return (
     <div className="space-y-4">
+      {isClickable && (
+        <p className="text-xs text-text-muted flex items-center gap-1.5">
+          <Info className="w-3.5 h-3.5" /> Klik pesanan untuk melihat detail pesanan dan pembayaran
+        </p>
+      )}
       {orders.map(order => (
-        <div key={order.id} className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden hover:border-primary/30 transition-colors">
+        <div
+          key={order.id}
+          className={`bg-white rounded-2xl border border-border shadow-sm overflow-hidden transition-all ${
+            isClickable
+              ? 'cursor-pointer hover:border-primary/50 hover:shadow-md hover:-translate-y-0.5'
+              : 'hover:border-primary/30'
+          }`}
+          onClick={() => isClickable && onSelectOrder(order)}
+        >
           {/* Card header */}
           <div className="flex flex-wrap justify-between items-center gap-3 px-5 py-4 border-b border-border bg-surface-lighter/50">
             <div className="flex items-center gap-3 flex-wrap">
@@ -414,7 +841,10 @@ function OrdersPanel({ orders, tabLabel, onPayNow, onCancel, onRefresh, onInvoic
           </div>
 
           {/* Footer */}
-          <div className="flex flex-wrap justify-between items-center gap-3 px-5 py-3.5 border-t border-border">
+          <div
+            className="flex flex-wrap justify-between items-center gap-3 px-5 py-3.5 border-t border-border"
+            onClick={e => isClickable && e.stopPropagation()}
+          >
             <div>
               <p className="text-xs text-text-muted mb-0.5">Total Pembayaran</p>
               <p className="font-bold text-primary">Rp {fmt(order.total_price)}</p>
@@ -454,13 +884,12 @@ function OrdersPanel({ orders, tabLabel, onPayNow, onCancel, onRefresh, onInvoic
                 </button>
               )}
               {order.biteship_waybill_id && (
-                <a
-                  href={`/tracking?waybill_id=${order.biteship_waybill_id}`}
-                  target="_blank" rel="noopener noreferrer"
+                <button
+                  onClick={(e) => { e.stopPropagation(); onSelectOrder({ ...order, _openTab: 'tracking' }); }}
                   className="px-3 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
                 >
                   <Truck className="w-3.5 h-3.5" /> Lacak Paket
-                </a>
+                </button>
               )}
             </div>
           </div>
