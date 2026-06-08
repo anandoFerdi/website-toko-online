@@ -80,10 +80,15 @@ class ProductController extends Controller
             'compatibility'=> 'nullable|array',
             'price'        => 'required|numeric|min:0',
             'stock'        => 'required|integer|min:0',
-            'image'        => 'nullable|string',
+            'image'        => 'nullable',
             'is_trending'  => 'boolean',
             'is_active'    => 'boolean',
         ]);
+
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('products', 'public');
+            $validated['image'] = '/storage/' . $path;
+        }
 
         $validated['slug'] = Str::slug($validated['name']) . '-' . Str::random(6);
 
@@ -104,10 +109,15 @@ class ProductController extends Controller
             'compatibility'=> 'nullable|array',
             'price'        => 'sometimes|numeric|min:0',
             'stock'        => 'sometimes|integer|min:0',
-            'image'        => 'nullable|string',
+            'image'        => 'nullable',
             'is_trending'  => 'boolean',
             'is_active'    => 'boolean',
         ]);
+
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('products', 'public');
+            $validated['image'] = '/storage/' . $path;
+        }
 
         if (isset($validated['name'])) {
             $validated['slug'] = Str::slug($validated['name']) . '-' . Str::random(6);

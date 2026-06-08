@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { ShoppingCart, Search, Eye, X, CheckCircle2, Clock, Package, AlertCircle, Printer, Truck, MapPin } from 'lucide-react';
+import { ShoppingCart, Search, Eye, X, CheckCircle2, Clock, Package, AlertCircle, Printer, Truck, MapPin, Edit } from 'lucide-react';
 import api from '@/lib/api';
 
 export default function AdminOrders() {
@@ -11,6 +11,7 @@ export default function AdminOrders() {
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [statusForm, setStatusForm] = useState({ status: '', payment_status: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,9 +47,23 @@ export default function AdminOrders() {
     setIsModalOpen(true);
   };
 
+  const openStatusModal = (order) => {
+    setSelectedOrder(order);
+    setStatusForm({ 
+      status: order.status, 
+      payment_status: order.payment_status 
+    });
+    setIsStatusModalOpen(true);
+  };
+
   const closeModal = () => {
     setIsModalOpen(false);
-    setSelectedOrder(null);
+    if (!isStatusModalOpen) setSelectedOrder(null);
+  };
+
+  const closeStatusModal = () => {
+    setIsStatusModalOpen(false);
+    if (!isModalOpen) setSelectedOrder(null);
   };
 
   const handleUpdateStatus = async (e) => {
@@ -58,7 +73,9 @@ export default function AdminOrders() {
     setIsSubmitting(true);
     try {
       await api.put(`/admin/orders/${selectedOrder.id}/status`, statusForm);
-      closeModal();
+      setIsModalOpen(false);
+      setIsStatusModalOpen(false);
+      setSelectedOrder(null);
       fetchOrders();
     } catch (error) {
       alert("Gagal mengupdate status pesanan.");
@@ -166,7 +183,13 @@ export default function AdminOrders() {
                     </td>
                     <td className="px-6 py-4">{getPaymentBadge(order.payment_status)}</td>
                     <td className="px-6 py-4">{getStatusBadge(order.status)}</td>
-                    <td className="px-6 py-4 flex justify-end">
+                    <td className="px-6 py-4 flex justify-end gap-2">
+                      <button 
+                        onClick={() => openStatusModal(order)}
+                        className="py-1.5 px-3 text-xs flex items-center gap-1 font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 rounded transition-colors"
+                      >
+                        <Edit className="w-3.5 h-3.5" /> Status
+                      </button>
                       <button 
                         onClick={() => openDetailModal(order)}
                         className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1"
@@ -329,6 +352,67 @@ export default function AdminOrders() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Separate Update Status Modal */}
+      {isStatusModalOpen && selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-border flex justify-between items-center bg-surface-lighter">
+              <h2 className="font-bold text-lg text-text-main">
+                Update Status
+              </h2>
+              <button onClick={closeStatusModal} className="text-text-muted hover:text-text-main transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleUpdateStatus} className="p-5 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text-main block">Status Pembayaran</label>
+                <select 
+                  value={statusForm.payment_status}
+                  onChange={(e) => setStatusForm({...statusForm, payment_status: e.target.value})}
+                  className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                >
+                  <option value="unpaid">Belum Bayar (Unpaid)</option>
+                  <option value="paid">Lunas (Paid)</option>
+                  <option value="refunded">Dikembalikan (Refunded)</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text-main block">Status Pesanan</label>
+                <select 
+                  value={statusForm.status}
+                  onChange={(e) => setStatusForm({...statusForm, status: e.target.value})}
+                  className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="processing">Diproses (Processing)</option>
+                  <option value="shipped">Dikirim (Shipped)</option>
+                  <option value="delivered">Selesai (Delivered)</option>
+                  <option value="cancelled">Dibatalkan (Cancelled)</option>
+                </select>
+              </div>
+              <div className="pt-2 flex gap-3">
+                <button 
+                  type="button" 
+                  onClick={closeStatusModal}
+                  className="flex-1 px-4 py-2 rounded-lg font-medium text-text-muted hover:bg-surface-lighter transition-colors"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="flex-1 btn-primary"
+                >
+                  {isSubmitting ? '...' : 'Update'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

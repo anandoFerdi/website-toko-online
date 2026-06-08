@@ -14,6 +14,8 @@ export default function AdminProducts() {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [imageMode, setImageMode] = useState('link'); // 'link' or 'upload'
+  const [imageFile, setImageFile] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     category_id: '',
@@ -69,6 +71,8 @@ export default function AdminProducts() {
       is_trending: false
     });
     setEditingId(null);
+    setImageMode('link');
+    setImageFile(null);
     setIsModalOpen(true);
   };
 
@@ -83,9 +87,12 @@ export default function AdminProducts() {
       image: product.image || '',
       specs: typeof product.specs === 'object' ? JSON.stringify(product.specs, null, 2) : product.specs,
       compatibility: typeof product.compatibility === 'object' ? JSON.stringify(product.compatibility, null, 2) : product.compatibility,
-      is_trending: Boolean(product.is_trending)
+      is_trending: Boolean(product.is_trending),
+      is_active: product.is_active !== undefined ? Boolean(product.is_active) : true
     });
     setEditingId(product.id);
+    setImageMode('link');
+    setImageFile(null);
     setIsModalOpen(true);
   };
 
@@ -128,18 +135,71 @@ export default function AdminProducts() {
         }
       }
 
-      const payload = {
-        ...formData,
-        price: parseInt(formData.price),
-        stock: parseInt(formData.stock),
-        specs: parsedSpecs,
-        compatibility: parsedCompatibility
-      };
+      let formPayload;
+      let isMultipart = false;
+
+      if (imageMode === 'upload' && imageFile) {
+        isMultipart = true;
+        formPayload = new FormData();
+        Object.keys(formData).forEach(key => {
+          if (key === 'specs' || key === 'compatibility' || key === 'image') return;
+          formPayload.append(key, formData[key]);
+        });
+        
+        formPayload.append('price', parseInt(formData.price));
+        formPayload.append('stock', parseInt(formData.stock));
+        formPayload.append('is_trending', formData.is_trending ? 1 : 0);
+        formPayload.append('is_active', formData.is_active !== undefined ? (formData.is_active ? 1 : 0) : 1);
+        
+        // Laravel's ProductController expects array for specs and compatibility, but we are sending FormData (which only accepts string)
+        // Wait, the API validates them as `nullable|array`. If we send JSON string via FormData, it might fail validation unless we handle it.
+        // Actually, if we send JSON string, Laravel validate array will fail. We should append them as array fields.
+        if (parsedSpecs) {
+          Object.keys(parsedSpecs).forEach(k => {
+            formPayload.append(`specs[${k}]`, parsedSpecs[k]);
+          });
+        }
+        if (parsedCompatibility) {
+          Object.keys(parsedCompatibility).forEach(k => {
+            formPayload.append(`compatibility[${k}]`, parsedCompatibility[k]);
+          });
+        }
+        
+        formPayload.append('image', imageFile);
+        
+        if (editingId) {
+          formPayload.append('_method', 'PUT');
+        }
+      } else {
+        formPayload = {
+          ...formData,
+          price: parseInt(formData.price),
+          stock: parseInt(formData.stock),
+          specs: parsedSpecs,
+          compatibility: parsedCompatibility,
+          is_active: formData.is_active !== undefined ? formData.is_active : true
+        };
+        if (imageMode === 'upload') {
+           formPayload.image = formData.image; // keep existing if edit
+        }
+      }
 
       if (editingId) {
-        await api.put(`/admin/products/${editingId}`, payload);
+        if (isMultipart) {
+          await api.post(`/admin/products/${editingId}`, formPayload, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+        } else {
+          await api.put(`/admin/products/${editingId}`, formPayload);
+        }
       } else {
-        await api.post('/admin/products', payload);
+        if (isMultipart) {
+          await api.post('/admin/products', formPayload, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+        } else {
+          await api.post('/admin/products', formPayload);
+        }
       }
       closeModal();
       fetchData(); // re-fetch
@@ -362,16 +422,59 @@ export default function AdminProducts() {
                   />
                 </div>
 
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium text-text-main block">URL Gambar (Opsional)</label>
-                  <input
-                    type="url"
-                    name="image"
-                    value={formData.image}
-                    onChange={handleChange}
-                    className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                    placeholder="https://..."
-                  />
+                <div className="space-y-3 md:col-span-2">
+                  <label className="text-sm font-medium text-text-main block mb-1">Gambar Produk</label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="radio" 
+                        checked={imageMode === 'link'} 
+                        onChange={() => setImageMode('link')}
+                        className="text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">Link URL</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="radio" 
+                        checked={imageMode === 'upload'} 
+                        onChange={() => setImageMode('upload')}
+                        className="text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">Upload File</span>
+                    </label>
+                  </div>
+
+                  {imageMode === 'link' ? (
+                    <input
+                      type="url"
+                      name="image"
+                      value={formData.image}
+                      onChange={handleChange}
+                      className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      placeholder="https://..."
+                    />
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setImageFile(e.target.files[0])}
+                        className="block w-full text-sm text-text-muted
+                          file:mr-4 file:py-2 file:px-4
+                          file:rounded-full file:border-0
+                          file:text-sm file:font-semibold
+                          file:bg-primary/10 file:text-primary
+                          hover:file:bg-primary/20
+                          cursor-pointer"
+                      />
+                      {editingId && formData.image && !imageFile && (
+                        <span className="text-xs text-orange-600 shrink-0">
+                          (Kosongkan jika tidak ingin mengubah gambar)
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2 md:col-span-2">

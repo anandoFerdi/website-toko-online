@@ -49,4 +49,12 @@ class Product extends Model
     {
         return 'Rp ' . number_format($this->price, 0, ',', '.');
     }
+
+    public function getImageAttribute($value)
+    {
+        if ($value && str_starts_with($value, '/storage/')) {
+            return rtrim(config('app.url'), '/') . $value;
+        }
+        return $value;
+    }
 }
