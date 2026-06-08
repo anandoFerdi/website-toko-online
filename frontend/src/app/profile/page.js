@@ -7,7 +7,7 @@ import {
   User, LogOut, Package, Clock, CheckCircle2, AlertCircle,
   ShoppingBag, CreditCard, FileDown, Settings, ChevronRight,
   MapPin, Lock, Mail, Trash2, ShoppingCart, Save, Eye, EyeOff,
-  X, Star
+  X, Star, Truck
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -19,6 +19,7 @@ const MENU = [
   { id: 'all',       label: 'Semua Pesanan',  icon: ShoppingBag },
   { id: 'pending',   label: 'Belum Dibayar',  icon: Clock       },
   { id: 'paid',      label: 'Dikemas',         icon: Package     },
+  { id: 'shipped',   label: 'Dikirim',         icon: Truck       },
   { id: 'cancelled', label: 'Dibatalkan',      icon: AlertCircle },
   { id: 'settings',  label: 'Pengaturan',      icon: Settings    },
 ];
@@ -169,7 +170,8 @@ export default function ProfilePage() {
   const filteredOrders = () => {
     if (tab === 'all')       return orders;
     if (tab === 'pending')   return orders.filter(o => o.payment_status === 'unpaid' && o.status !== 'cancelled');
-    if (tab === 'paid')      return orders.filter(o => o.payment_status === 'paid');
+    if (tab === 'paid')      return orders.filter(o => o.payment_status === 'paid' && o.status === 'processing');
+    if (tab === 'shipped')   return orders.filter(o => o.status === 'shipped' || o.status === 'delivered');
     if (tab === 'cancelled') return orders.filter(o => o.status === 'cancelled');
     return orders;
   };
@@ -450,6 +452,15 @@ function OrdersPanel({ orders, tabLabel, onPayNow, onCancel, onRefresh, onInvoic
                 >
                   <FileDown className="w-3.5 h-3.5" /> Invoice PDF
                 </button>
+              )}
+              {order.biteship_waybill_id && (
+                <a
+                  href={`/tracking?waybill_id=${order.biteship_waybill_id}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
+                >
+                  <Truck className="w-3.5 h-3.5" /> Lacak Paket
+                </a>
               )}
             </div>
           </div>

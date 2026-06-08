@@ -11,17 +11,18 @@ class Product extends Model
 
     protected $fillable = [
         'category_id', 'brand_id', 'name', 'slug', 'description',
-        'specs', 'compatibility', 'price', 'stock', 'image',
+        'specs', 'compatibility', 'price', 'stock', 'weight', 'image',
         'rating', 'review_count', 'is_trending', 'is_active',
     ];
 
     protected $casts = [
-        'specs' => 'array',
-        'compatibility' => 'array',
-        'price' => 'decimal:2',
-        'rating' => 'decimal:2',
-        'is_trending' => 'boolean',
-        'is_active' => 'boolean',
+        'specs'          => 'array',
+        'compatibility'  => 'array',
+        'price'          => 'decimal:2',
+        'rating'         => 'decimal:2',
+        'weight'         => 'integer',
+        'is_trending'    => 'boolean',
+        'is_active'      => 'boolean',
     ];
 
     public function category()

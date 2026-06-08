@@ -13,6 +13,12 @@ class Order extends Model
         'user_id', 'order_number', 'subtotal', 'shipping_cost', 'total_price',
         'status', 'payment_status', 'payment_method', 'midtrans_order_id',
         'midtrans_token', 'shipping_address', 'recipient_name', 'recipient_phone', 'notes',
+        // Biteship / shipping fields
+        'biteship_order_id', 'biteship_waybill_id',
+        'courier_company', 'courier_service', 'courier_service_name',
+        'shipping_province', 'shipping_city', 'shipping_district',
+        'shipping_village', 'shipping_postal_code',
+        'shipping_lat', 'shipping_lng', 'destination_area_id',
     ];
 
     protected $casts = [

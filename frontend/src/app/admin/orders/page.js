@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { ShoppingCart, Search, Eye, X, CheckCircle2, Clock, Package, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Search, Eye, X, CheckCircle2, Clock, Package, AlertCircle, Printer, Truck, MapPin } from 'lucide-react';
 import api from '@/lib/api';
 
 export default function AdminOrders() {
@@ -65,6 +65,20 @@ export default function AdminOrders() {
       console.error(error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDownloadLabel = async () => {
+    if (!selectedOrder?.biteship_order_id) return;
+    try {
+      const res = await api.get(`/admin/orders/${selectedOrder.id}/label`, { responseType: 'text' });
+      const blob = new Blob([res.data], { type: 'text/html' });
+      const url = window.URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      win.focus();
+    } catch (error) {
+      alert("Gagal mendownload label. Pastikan resi sudah terbuat.");
+      console.error(error);
     }
   };
 
@@ -190,22 +204,54 @@ export default function AdminOrders() {
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Order Info */}
               <div className="space-y-6">
-                <div>
-                  <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider mb-3">Informasi Pelanggan</h3>
-                  <div className="bg-surface-lighter p-4 rounded-lg border border-border space-y-2 text-sm">
-                    <p><span className="text-text-muted">Nama:</span> <span className="font-medium text-text-main">{selectedOrder.recipient_name}</span></p>
-                    <p><span className="text-text-muted">Telepon:</span> <span className="font-medium text-text-main">{selectedOrder.recipient_phone}</span></p>
-                    <p><span className="text-text-muted">Email:</span> <span className="font-medium text-text-main">{selectedOrder.user?.email}</span></p>
-                    <div className="pt-2 mt-2 border-t border-border">
-                      <span className="text-text-muted block mb-1">Alamat Pengiriman:</span>
-                      <p className="font-medium text-text-main leading-relaxed">{selectedOrder.shipping_address}</p>
-                    </div>
-                    {selectedOrder.notes && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider mb-3">Informasi Pelanggan</h3>
+                    <div className="bg-surface-lighter p-4 rounded-lg border border-border space-y-2 text-sm">
+                      <p><span className="text-text-muted">Nama:</span> <span className="font-medium text-text-main">{selectedOrder.recipient_name}</span></p>
+                      <p><span className="text-text-muted">Telepon:</span> <span className="font-medium text-text-main">{selectedOrder.recipient_phone}</span></p>
+                      <p><span className="text-text-muted">Email:</span> <span className="font-medium text-text-main">{selectedOrder.user?.email}</span></p>
                       <div className="pt-2 mt-2 border-t border-border">
-                        <span className="text-text-muted block mb-1">Catatan:</span>
-                        <p className="font-medium text-text-main italic">{selectedOrder.notes}</p>
+                        <span className="text-text-muted block mb-1">Alamat Pengiriman:</span>
+                        <p className="font-medium text-text-main leading-relaxed">{selectedOrder.shipping_address}</p>
                       </div>
-                    )}
+                      {selectedOrder.notes && (
+                        <div className="pt-2 mt-2 border-t border-border">
+                          <span className="text-text-muted block mb-1">Catatan:</span>
+                          <p className="font-medium text-text-main italic">{selectedOrder.notes}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider mb-3 flex items-center justify-between">
+                      Informasi Pengiriman
+                      {selectedOrder.biteship_order_id && (
+                        <button 
+                          onClick={handleDownloadLabel}
+                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 font-medium bg-blue-50 px-2 py-1 rounded"
+                        >
+                          <Printer className="w-3 h-3" /> Cetak Label
+                        </button>
+                      )}
+                    </h3>
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 space-y-2 text-sm">
+                      <p><span className="text-blue-700">Kurir:</span> <span className="font-medium text-blue-900">{selectedOrder.courier_service_name || '-'}</span></p>
+                      <p><span className="text-blue-700">No. Resi:</span> <span className="font-mono font-bold text-blue-900">{selectedOrder.biteship_waybill_id || '-'}</span></p>
+                      {!selectedOrder.biteship_waybill_id && (
+                        <p className="text-xs text-orange-600 italic mt-2">Resi akan dibuat otomatis saat status diubah menjadi "Dikirim".</p>
+                      )}
+                      {selectedOrder.biteship_waybill_id && (
+                        <a 
+                          href={`/tracking?waybill_id=${selectedOrder.biteship_waybill_id}`} 
+                          target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-2 font-medium"
+                        >
+                          <MapPin className="w-3 h-3" /> Lacak Paket
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
 

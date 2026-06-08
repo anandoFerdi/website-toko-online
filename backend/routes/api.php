@@ -7,6 +7,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ShippingController;
 use App\Http\Controllers\TestimonialController;
 use Illuminate\Support\Facades\Route;
 
@@ -40,10 +41,15 @@ Route::post('/ai/chat', [AIController::class, 'chat']);
 Route::post('/ai/build', [AIController::class, 'generateBuild']);
 Route::post('/ai/compatibility', [AIController::class, 'checkCompatibility']);
 
+// Public Shipping
+Route::get('/shipping/areas', [ShippingController::class, 'searchAreas']);
+Route::post('/shipping/rates', [ShippingController::class, 'getRates']);
+Route::get('/shipping/track', [ShippingController::class, 'track']);
+
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/testimonials', [TestimonialController::class, 'store']);
-    
+
     // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
@@ -92,7 +98,12 @@ Route::middleware('auth:sanctum')->group(function () {
         // Orders Management
         Route::get('/orders', [OrderController::class, 'adminIndex']);
         Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus']);
-        
+        Route::get('/orders/{id}/tracking', [ShippingController::class, 'trackOrder']);
+        Route::get('/orders/{id}/label', [ShippingController::class, 'downloadLabel']);
+
+        // Shipping — Admin area search (to find origin area_id)
+        Route::get('/shipping/areas', [ShippingController::class, 'adminSearchAreas']);
+
         // Users Management
         Route::get('/users', [\App\Http\Controllers\UserController::class, 'index']);
         Route::post('/users', [\App\Http\Controllers\UserController::class, 'store']);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Services\BiteshipService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Str;
@@ -18,12 +19,16 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class OrderController extends Controller
 {
-    public function __construct()
+    protected BiteshipService $biteship;
+
+    public function __construct(BiteshipService $biteship)
     {
         Config::$serverKey    = config('midtrans.server_key');
         Config::$isProduction = config('midtrans.is_production');
         Config::$isSanitized  = true;
         Config::$is3ds        = true;
+
+        $this->biteship = $biteship;
     }
 
     public function index(Request $request): JsonResponse
@@ -48,10 +53,26 @@ class OrderController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'shipping_address' => 'required|string',
-            'recipient_name'   => 'required|string|max:255',
-            'recipient_phone'  => 'required|string|max:20',
-            'notes'            => 'nullable|string',
+            'recipient_name'      => 'required|string|max:255',
+            'recipient_phone'     => 'required|string|max:20',
+            'shipping_address'    => 'required|string',
+            'notes'               => 'nullable|string',
+
+            // Structured address
+            'shipping_province'   => 'nullable|string|max:100',
+            'shipping_city'       => 'nullable|string|max:100',
+            'shipping_district'   => 'nullable|string|max:100',
+            'shipping_village'    => 'nullable|string|max:100',
+            'shipping_postal_code'=> 'nullable|string|max:10',
+            'shipping_lat'        => 'nullable|numeric',
+            'shipping_lng'        => 'nullable|numeric',
+
+            // Biteship
+            'destination_area_id' => 'nullable|string',
+            'courier_company'     => 'nullable|string|max:50',
+            'courier_service'     => 'nullable|string|max:50',
+            'courier_service_name'=> 'nullable|string|max:100',
+            'shipping_cost'       => 'nullable|numeric|min:0',
         ]);
 
         $cartItems = Cart::with('product')
@@ -64,24 +85,40 @@ class OrderController extends Controller
 
         return DB::transaction(function () use ($request, $validated, $cartItems) {
             $subtotal    = $cartItems->sum(fn($item) => $item->quantity * $item->product->price);
-            $shippingCost = 0;
+            $threshold   = (float) config('biteship.free_shipping_threshold', 500000);
+            $shippingCost = $subtotal >= $threshold ? 0 : (float) ($validated['shipping_cost'] ?? 0);
             $total        = $subtotal + $shippingCost;
             $user         = $request->user();
             $orderNumber  = 'GK-' . strtoupper(Str::random(10));
 
             $order = Order::create([
-                'user_id'          => $user->id,
-                'order_number'     => $orderNumber,
-                'subtotal'         => $subtotal,
-                'shipping_cost'    => $shippingCost,
-                'total_price'      => $total,
-                'status'           => 'pending',
-                'payment_status'   => 'unpaid',
-                'payment_method'   => 'midtrans',
-                'shipping_address' => $validated['shipping_address'],
-                'recipient_name'   => $validated['recipient_name'],
-                'recipient_phone'  => $validated['recipient_phone'],
-                'notes'            => $validated['notes'] ?? null,
+                'user_id'              => $user->id,
+                'order_number'         => $orderNumber,
+                'subtotal'             => $subtotal,
+                'shipping_cost'        => $shippingCost,
+                'total_price'          => $total,
+                'status'               => 'pending',
+                'payment_status'       => 'unpaid',
+                'payment_method'       => 'midtrans',
+                'shipping_address'     => $validated['shipping_address'],
+                'recipient_name'       => $validated['recipient_name'],
+                'recipient_phone'      => $validated['recipient_phone'],
+                'notes'                => $validated['notes'] ?? null,
+
+                // Structured address
+                'shipping_province'    => $validated['shipping_province'] ?? null,
+                'shipping_city'        => $validated['shipping_city'] ?? null,
+                'shipping_district'    => $validated['shipping_district'] ?? null,
+                'shipping_village'     => $validated['shipping_village'] ?? null,
+                'shipping_postal_code' => $validated['shipping_postal_code'] ?? null,
+                'shipping_lat'         => $validated['shipping_lat'] ?? null,
+                'shipping_lng'         => $validated['shipping_lng'] ?? null,
+
+                // Biteship courier selection
+                'destination_area_id'  => $validated['destination_area_id'] ?? null,
+                'courier_company'      => $validated['courier_company'] ?? null,
+                'courier_service'      => $validated['courier_service'] ?? null,
+                'courier_service_name' => $validated['courier_service_name'] ?? null,
             ]);
 
             $itemDetails = [];
@@ -113,13 +150,23 @@ class OrderController extends Controller
                     'order_id'     => $orderNumber,
                     'gross_amount' => (int) $total,
                 ],
-                'item_details' => $itemDetails,
+                'item_details'     => $itemDetails,
                 'customer_details' => [
                     'first_name' => $validated['recipient_name'],
                     'email'      => $user->email,
                     'phone'      => $validated['recipient_phone'],
                 ],
             ];
+
+            // Add shipping cost as line item for Midtrans if applicable
+            if ($shippingCost > 0) {
+                $params['item_details'][] = [
+                    'id'       => 'SHIPPING',
+                    'price'    => (int) $shippingCost,
+                    'quantity' => 1,
+                    'name'     => 'Ongkos Kirim (' . strtoupper($validated['courier_company'] ?? 'Kurir') . ')',
+                ];
+            }
 
             try {
                 $snapToken = Snap::getSnapToken($params);
@@ -189,21 +236,74 @@ class OrderController extends Controller
         return response()->json($orders);
     }
 
+    /**
+     * Admin: Update order status.
+     * When status changes to 'shipped', automatically creates Biteship order and gets AWB.
+     */
     public function updateStatus(Request $request, $id): JsonResponse
     {
-        $order = Order::findOrFail($id);
+        $order = Order::with('items.product')->findOrFail($id);
+
         $validated = $request->validate([
             'status'         => 'sometimes|in:pending,processing,shipped,delivered,cancelled',
             'payment_status' => 'sometimes|in:unpaid,paid,refunded',
         ]);
+
+        $previousStatus = $order->status;
+        $newStatus      = $validated['status'] ?? $previousStatus;
+
+        // Auto-create Biteship shipment when changing to 'shipped'
+        if ($newStatus === 'shipped' && $previousStatus !== 'shipped' && !$order->biteship_order_id) {
+            if ($order->destination_area_id && $order->courier_company && $order->courier_service) {
+                try {
+                    $itemsData = $order->items->map(fn($item) => [
+                        'product_id'   => $item->product_id,
+                        'product_name' => $item->product?->name ?? 'Produk',
+                        'price'        => (int) $item->price,
+                        'weight'       => $item->product?->weight ?? 500,
+                        'quantity'     => $item->quantity,
+                    ])->toArray();
+
+                    $biteshipResponse = $this->biteship->createOrder([
+                        'order_number'         => $order->order_number,
+                        'recipient_name'       => $order->recipient_name,
+                        'recipient_phone'      => $order->recipient_phone,
+                        'shipping_address'     => $order->shipping_address,
+                        'notes'                => $order->notes,
+                        'destination_area_id'  => $order->destination_area_id,
+                        'shipping_postal_code'  => $order->shipping_postal_code,
+                        'shipping_lat'         => $order->shipping_lat,
+                        'shipping_lng'         => $order->shipping_lng,
+                        'courier_company'      => $order->courier_company,
+                        'courier_service'      => $order->courier_service,
+                        'items'                => $itemsData,
+                    ]);
+
+                    $validated['biteship_order_id'] = $biteshipResponse['id'] ?? null;
+                    $validated['biteship_waybill_id'] = $biteshipResponse['waybill_id'] ?? null;
+
+                    Log::info('Biteship order created for order ' . $order->order_number . ': ' . json_encode($biteshipResponse));
+                } catch (\Exception $e) {
+                    Log::error('Failed to create Biteship order for ' . $order->order_number . ': ' . $e->getMessage());
+                    // Don't block the status update — just log the error
+                }
+            }
+        }
+
         $order->update($validated);
-        return response()->json($order);
+
+        return response()->json([
+            'order'   => $order->fresh(),
+            'message' => $newStatus === 'shipped' && isset($validated['biteship_waybill_id'])
+                ? 'Status diupdate dan resi ' . $validated['biteship_waybill_id'] . ' berhasil dibuat!'
+                : 'Status berhasil diupdate.',
+        ]);
     }
 
     public function cancel(Request $request, $id): JsonResponse
     {
         $order = Order::with('items.product')->where('user_id', $request->user()->id)->findOrFail($id);
-        
+
         if ($order->status === 'cancelled') {
             return response()->json(['message' => 'Pesanan sudah dibatalkan'], 400);
         }
@@ -213,7 +313,7 @@ class OrderController extends Controller
 
         return DB::transaction(function () use ($order) {
             $order->update([
-                'status' => 'cancelled',
+                'status'         => 'cancelled',
                 'payment_status' => 'unpaid'
             ]);
 
@@ -236,8 +336,6 @@ class OrderController extends Controller
             return response()->json(['message' => 'Pesanan sudah dibayar'], 400);
         }
 
-        // To generate a new token, Midtrans requires a unique order_id per transaction attempt.
-        // We append a timestamp to the original order_number.
         $newMidtransOrderId = $order->order_number . '-' . time();
 
         $itemDetails = [];
@@ -252,12 +350,21 @@ class OrderController extends Controller
             }
         }
 
+        if ($order->shipping_cost > 0) {
+            $itemDetails[] = [
+                'id'       => 'SHIPPING',
+                'price'    => (int) $order->shipping_cost,
+                'quantity' => 1,
+                'name'     => 'Ongkos Kirim (' . strtoupper($order->courier_company ?? 'Kurir') . ')',
+            ];
+        }
+
         $params = [
             'transaction_details' => [
                 'order_id'     => $newMidtransOrderId,
                 'gross_amount' => (int) $order->total_price,
             ],
-            'item_details' => $itemDetails,
+            'item_details'     => $itemDetails,
             'customer_details' => [
                 'first_name' => $order->recipient_name,
                 'email'      => $request->user()->email,
@@ -267,8 +374,7 @@ class OrderController extends Controller
 
         try {
             $snapToken = Snap::getSnapToken($params);
-            
-            // If the order was cancelled, we restore it to pending and reduce stock again
+
             if ($order->status === 'cancelled') {
                 foreach ($order->items as $item) {
                     if ($item->product) {
@@ -278,10 +384,10 @@ class OrderController extends Controller
             }
 
             $order->update([
-                'midtrans_token' => $snapToken, 
+                'midtrans_token'    => $snapToken,
                 'midtrans_order_id' => $newMidtransOrderId,
-                'status' => 'pending',
-                'payment_status' => 'unpaid'
+                'status'            => 'pending',
+                'payment_status'    => 'unpaid'
             ]);
 
             return response()->json([
@@ -307,10 +413,10 @@ class OrderController extends Controller
         }
 
         try {
-            $statusResponse = Transaction::status($order->midtrans_order_id);
+            $statusResponse    = Transaction::status($order->midtrans_order_id);
             $transactionStatus = $statusResponse->transaction_status;
-            $paymentType = $statusResponse->payment_type ?? null;
-            $fraudStatus = $statusResponse->fraud_status ?? null;
+            $paymentType       = $statusResponse->payment_type ?? null;
+            $fraudStatus       = $statusResponse->fraud_status ?? null;
 
             if ($transactionStatus === 'capture') {
                 if ($fraudStatus === 'challenge') {
