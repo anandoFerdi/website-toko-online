@@ -1,2 +1,13 @@
 *
 !.gitignore
+# 1. Izinkan Git mendeteksi folder products
+!products/
+
+# 2. HANYA izinkan file seeder bawaan ini yang boleh masuk Git
+!products/afgcz62rQIU43t6ak1ry2MFLhQYPpQxfW6f26WDY.jpg
+!products/aNF3LkDgiscPl4eCVneSZFH1cgbTgNpJLo4spV2A.jpg
+!products/chLy3uzb2mwLoIZiqagVEXTwGCZLh6zWjBOJ2doB.png
+!products/eUqW2Mrf1mX6QNTsCPzpSNbwcsxVqfte75VaD4uJ.jpg
+!products/g5pvNj9kPgrloo1FRYWbh9mZcbF4vPlmjKzgXCLQ.jpg
+!products/HJA4kQ0MMCtEzbZDKPZ0ZJKLm20ha0Bktewkn8G0.jpg
+!products/qTEFdBiGlLJfFrXDKwlx0VdB5GUJEu74swIU5eaR.jpg
