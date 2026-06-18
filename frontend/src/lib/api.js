@@ -2,7 +2,7 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://website-toko-online-production.up.railway.app/api',
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
@@ -24,7 +24,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use((response) => {
   // Trigger cart update event if the request modified the cart or created an order (which clears the cart)
   if (
-    response.config.url.includes('/cart') || 
+    response.config.url.includes('/cart') ||
     (response.config.url.includes('/orders') && response.config.method === 'post')
   ) {
     if (response.config.method !== 'get') {

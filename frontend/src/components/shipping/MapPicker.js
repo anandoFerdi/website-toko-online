@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
-import { MapPin, Navigation, Loader2 } from 'lucide-react';
+import { MapPin, Navigation, Loader2, Search } from 'lucide-react';
 
 // ─── LeafletMap (inner — loads leaflet dynamically) ───────────────────────
 function LeafletMapInner({ lat, lng, onLocationSelect }) {
@@ -169,8 +169,33 @@ export default function MapPicker({ onLocationSelect, defaultLat, defaultLng }) 
   const [location, setLocation] = useState({ lat: defaultLat, lng: defaultLng });
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setSearchLoading(true);
+    setGeoError('');
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const { lat, lon } = data[0];
+        const newLoc = { lat: parseFloat(lat), lng: parseFloat(lon) };
+        setLocation(newLoc);
+        onLocationSelect?.(newLoc);
+      } else {
+        setGeoError('Lokasi tidak ditemukan');
+      }
+    } catch (error) {
+      setGeoError('Terjadi kesalahan saat mencari lokasi');
+    } finally {
+      setSearchLoading(false);
+    }
+  };
 
   const handleLocationSelect = (loc) => {
     setLocation(loc);
@@ -226,6 +251,26 @@ export default function MapPicker({ onLocationSelect, defaultLat, defaultLng }) 
       {geoError && (
         <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{geoError}</p>
       )}
+
+      <form onSubmit={handleSearch} className="flex items-center gap-2 mb-2 relative">
+        <div className="relative flex-1">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cari lokasi (contoh: Monas, Jakarta)..."
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        </div>
+        <button
+          type="submit"
+          disabled={searchLoading}
+          className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 disabled:opacity-50 transition-colors flex items-center justify-center min-w-[70px]"
+        >
+          {searchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Cari'}
+        </button>
+      </form>
 
       {mounted ? (
         <LeafletMapInner
