@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Search, Filter, Cpu, Zap, ShoppingCart, Star, SlidersHorizontal, X, Package, ChevronDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import api from '@/lib/api';
+export const dynamic = 'force-dynamic';
 
-export default function ProductsPage() {
+function ProductsContent() {
   const searchParams = useSearchParams();
   const categoryQuery = searchParams.get('category');
 
@@ -309,5 +310,13 @@ export default function ProductsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center p-8"><div className="skeleton h-32 w-full max-w-4xl rounded-xl"></div></div>}>
+      <ProductsContent />
+    </Suspense>
   );
 }
