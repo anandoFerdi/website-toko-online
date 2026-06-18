@@ -53,6 +53,8 @@ RUN echo 'server { \n\
     } \n\
 }' > /etc/nginx/sites-available/default
 
+# Tambahkan ini di bagian bawah Dockerfile sebelum EXPOSE 80
+RUN chmod -R 777 /var/www/storage /var/www/bootstrap/cache
 # Expose port 80
 EXPOSE 80
 CMD php-fpm -D && nginx -g "daemon off;"
