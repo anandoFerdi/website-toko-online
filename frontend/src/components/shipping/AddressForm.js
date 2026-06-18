@@ -287,7 +287,7 @@ export default function AddressForm({ onChange }) {
         <input
           type="text"
           value={postalCode}
-          onChange={e => setPostalCode(e.target.value)}
+          onChange={e => setPostalCode(e.target.value.replace(/\D/g, ''))}
           placeholder="12345"
           maxLength={6}
           className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all placeholder:text-gray-400"
