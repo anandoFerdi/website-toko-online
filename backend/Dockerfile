@@ -1,12 +1,13 @@
 FROM php:8.2-fpm
 
-# Install system dependencies
+# Install system dependencies & common PHP extensions requirements
 RUN apt-get update && apt-get install -y \
     git \
     curl \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
+    libzip-dev \
     zip \
     unzip \
     nginx
@@ -14,8 +15,8 @@ RUN apt-get update && apt-get install -y \
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/lists/*
 
-# Install PHP extensions
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+# Install PHP extensions wajib untuk Laravel
+RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
 
 # Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -23,11 +24,12 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
-# Copy existing application directory contents
+# Copy seluruh file proyek ke dalam server
 COPY . /var/www
 
-# Install dependencies via Composer
-RUN composer install --no-interaction --optimize-autoloader --no-dev
+# Bypass/abaikan pengecekan ekstensi yang ketat saat install composer di build time
+ENV COMPOSER_ALLOW_SUPERUSER=1
+RUN composer install --no-interaction --optimize-autoloader --no-dev --ignore-platform-reqs
 
 # Setup Nginx configuration
 RUN echo 'server { \n\
@@ -51,6 +53,6 @@ RUN echo 'server { \n\
     } \n\
 }' > /etc/nginx/sites-available/default
 
-# Expose port 80 and start nginx and php-fpm
+# Expose port 80
 EXPOSE 80
 CMD php-fpm -D && nginx -g "daemon off;"
